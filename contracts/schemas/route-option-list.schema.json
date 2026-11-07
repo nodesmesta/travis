@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/route-option-list.schema.json",
+  "title": "Route Option List",
+  "type": "object",
+  "required": [
+    "request_id",
+    "route_request_id",
+    "recommended_option_id",
+    "items",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "route_request_id": { "type": "string", "format": "uuid" },
+    "recommended_option_id": { "type": ["string", "null"], "format": "uuid" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "./route-option.schema.json" }
+    },
+    "sources": { "type": "array", "items": { "$ref": "./source.schema.json" } }
+  }
+}

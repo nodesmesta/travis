@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/traffic-snapshot.schema.json",
+  "title": "Traffic Snapshot",
+  "description": "Normalized HERE Traffic API v7 facts for the area around a journey leg corridor. This is area traffic, not a specific route. traffic_level is derived under policy_version.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "origin_context_point_id",
+    "destination_context_point_id",
+    "provider",
+    "source_id",
+    "policy_version",
+    "traffic_level",
+    "observed_at",
+    "valid_from",
+    "valid_to",
+    "retrieved_at",
+    "expires_at",
+    "freshness",
+    "area",
+    "summary",
+    "incidents"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "journey_leg_id": { "type": ["string", "null"], "format": "uuid" },
+    "origin_context_point_id": { "type": "string", "format": "uuid" },
+    "destination_context_point_id": { "type": "string", "format": "uuid" },
+    "provider": { "const": "here_traffic_v7" },
+    "source_id": { "type": "string", "format": "uuid" },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "traffic_level": { "enum": ["low", "medium", "high", "unknown"] },
+    "observed_at": { "type": ["string", "null"], "format": "date-time" },
+    "valid_from": { "type": "string", "format": "date-time" },
+    "valid_to": { "type": "string", "format": "date-time" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired"] },
+    "cache_status": { "enum": ["hit", "miss"] },
+    "area": {
+      "type": "object",
+      "required": ["latitude", "longitude", "radius_meters"],
+      "additionalProperties": false,
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "radius_meters": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "segment_count",
+        "average_jam_factor",
+        "max_jam_factor",
+        "closed_segment_count",
+        "incident_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "segment_count": { "type": "integer", "minimum": 0 },
+        "average_jam_factor": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 10
+        },
+        "max_jam_factor": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 10
+        },
+        "closed_segment_count": { "type": "integer", "minimum": 0 },
+        "incident_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "incidents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "criticality",
+          "road_closed",
+          "summary",
+          "start_time",
+          "end_time"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": { "type": ["string", "null"] },
+          "criticality": {
+            "enum": ["critical", "major", "minor", "low", null]
+          },
+          "road_closed": { "type": "boolean" },
+          "summary": { "type": ["string", "null"] },
+          "start_time": { "type": ["string", "null"], "format": "date-time" },
+          "end_time": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    }
+  }
+}

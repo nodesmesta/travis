@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/route-request.schema.json",
+  "title": "Route Request",
+  "description": "A request to compare routes for one journey leg. A failed request keeps its error code for audit and has no options.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "journey_leg_id",
+    "origin_context_point_id",
+    "destination_context_point_id",
+    "departure_at",
+    "arrival_deadline",
+    "preferences",
+    "required_facts",
+    "modes",
+    "status",
+    "error_code",
+    "policy_version",
+    "selected_option_id",
+    "retrieved_at",
+    "expires_at",
+    "freshness",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "journey_leg_id": { "type": "string", "format": "uuid" },
+    "origin_context_point_id": { "type": "string", "format": "uuid" },
+    "destination_context_point_id": { "type": "string", "format": "uuid" },
+    "departure_at": { "type": "string", "format": "date-time" },
+    "arrival_deadline": { "type": ["string", "null"], "format": "date-time" },
+    "preferences": { "$ref": "#/$defs/preferences" },
+    "required_facts": {
+      "type": "array",
+      "items": { "enum": ["route", "traffic", "weather"] }
+    },
+    "modes": {
+      "type": "array",
+      "items": { "enum": ["car", "taxi", "pedestrian", "transit"] }
+    },
+    "status": { "enum": ["completed", "failed"] },
+    "error_code": { "type": ["string", "null"] },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "selected_option_id": { "type": ["string", "null"], "format": "uuid" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired"] },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "preferences": {
+      "type": "object",
+      "required": [
+        "preferred_modes",
+        "max_walking_minutes",
+        "max_transfers",
+        "budget_preference",
+        "avoid_heavy_traffic",
+        "comfort_priority"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "preferred_modes": {
+          "type": "array",
+          "items": { "enum": ["car", "taxi", "pedestrian", "transit"] }
+        },
+        "max_walking_minutes": { "type": "number", "minimum": 0 },
+        "max_transfers": { "type": "integer", "minimum": 0 },
+        "budget_preference": { "enum": ["low", "moderate", "high"] },
+        "avoid_heavy_traffic": { "type": "boolean" },
+        "comfort_priority": { "enum": ["low", "medium", "high"] }
+      }
+    }
+  }
+}

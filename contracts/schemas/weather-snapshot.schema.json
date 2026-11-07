@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/weather-snapshot.schema.json",
+  "title": "Weather Snapshot",
+  "description": "Normalized OpenWeather facts for one context point. Units: Celsius, meters per second, meters, millimeters. Precipitation probability is 0 to 1. A null value means the provider did not return it.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "context_point_id",
+    "provider",
+    "source_id",
+    "timezone",
+    "observed_at",
+    "valid_from",
+    "valid_to",
+    "retrieved_at",
+    "expires_at",
+    "freshness",
+    "current",
+    "hourly",
+    "daily",
+    "alerts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "context_point_id": { "type": "string", "format": "uuid" },
+    "provider": { "const": "openweather_onecall_3" },
+    "source_id": { "type": "string", "format": "uuid" },
+    "timezone": { "type": "string", "minLength": 1 },
+    "observed_at": { "type": ["string", "null"], "format": "date-time" },
+    "valid_from": { "type": "string", "format": "date-time" },
+    "valid_to": { "type": "string", "format": "date-time" },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired"] },
+    "cache_status": { "enum": ["hit", "miss"] },
+    "current": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/point" }] },
+    "hourly": { "type": "array", "items": { "$ref": "#/$defs/point" } },
+    "daily": { "type": "array", "items": { "$ref": "#/$defs/point" } },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sender", "event", "start", "end"],
+        "additionalProperties": false,
+        "properties": {
+          "sender": { "type": ["string", "null"] },
+          "event": { "type": "string" },
+          "start": { "type": ["string", "null"], "format": "date-time" },
+          "end": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": [
+        "at",
+        "granularity",
+        "temperature_c",
+        "precipitation_probability",
+        "precipitation_mm",
+        "wind_speed_ms",
+        "visibility_m",
+        "condition_id",
+        "condition",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "granularity": { "enum": ["current", "hourly", "daily"] },
+        "temperature_c": { "type": ["number", "null"] },
+        "precipitation_probability": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "precipitation_mm": { "type": ["number", "null"], "minimum": 0 },
+        "wind_speed_ms": { "type": ["number", "null"], "minimum": 0 },
+        "visibility_m": { "type": ["number", "null"], "minimum": 0 },
+        "condition_id": { "type": ["integer", "null"] },
+        "condition": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
