@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/invoice.schema.json",
+  "title": "Invoice",
+  "description": "Invoice issued for a booking whose dummy payment succeeded. Amounts are copied from the booking, which the server priced, and are checked against the payment. The PDF is stored in a private bucket and is only available through the authorized download endpoint.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "booking_id",
+    "payment_id",
+    "invoice_number",
+    "status",
+    "currency",
+    "subtotal",
+    "tax",
+    "total",
+    "pricing_policy",
+    "booking_type",
+    "booking_reference",
+    "payment_reference",
+    "payment_status",
+    "issued_at",
+    "pdf",
+    "error_code",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "booking_id": { "type": "string", "format": "uuid" },
+    "payment_id": { "type": "string", "format": "uuid" },
+    "invoice_number": {
+      "type": "string",
+      "minLength": 15,
+      "maxLength": 15,
+      "description": "INV-YYYY-NNNNNN. YYYY is the UTC year of issued_at. NNNNNN is a gapless counter per year, zero padded."
+    },
+    "status": {
+      "enum": ["pending", "issued", "failed"],
+      "description": "pending: numbered, PDF not stored yet. issued: PDF stored and verified. failed: the PDF could not be stored; generating again resumes the same invoice."
+    },
+    "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+    "subtotal": { "type": "number", "minimum": 0 },
+    "tax": { "type": "number", "minimum": 0 },
+    "total": { "type": "number", "minimum": 0 },
+    "pricing_policy": { "type": "string", "minLength": 1 },
+    "booking_type": { "enum": ["event", "activity", "itinerary_item"] },
+    "item_title": {
+      "type": ["string", "null"],
+      "description": "Title of the booked event, activity, or agenda item when the source row still exists."
+    },
+    "booking_reference": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Booking confirmation code."
+    },
+    "payment_reference": { "type": "string", "minLength": 1 },
+    "payment_status": {
+      "enum": ["pending", "succeeded", "failed", "cancelled", "refunded"]
+    },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "pdf": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["sha256", "size_bytes", "content_type", "download_path"],
+          "additionalProperties": false,
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "description": "Lowercase hex SHA-256 of the stored PDF bytes. The download endpoint checks it before it sends the file."
+            },
+            "size_bytes": { "type": "integer", "minimum": 1 },
+            "content_type": { "const": "application/pdf" },
+            "download_path": {
+              "type": "string",
+              "description": "API path of the authorized download endpoint. Storage URLs are never exposed."
+            }
+          }
+        }
+      ]
+    },
+    "error_code": {
+      "type": ["string", "null"],
+      "description": "Safe code of the last PDF failure while status is failed."
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

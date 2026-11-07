@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/email-delivery.schema.json",
+  "title": "EmailDelivery",
+  "description": "One request to email the invoice PDF to a recipient the user confirmed. A resend is a new delivery. A delivery is attempted once; the server never retries it. A failed delivery does not change the booking, the payment, or the invoice.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "invoice_id",
+    "sequence",
+    "recipient_email",
+    "status",
+    "provider",
+    "provider_message_id",
+    "error_code",
+    "error_message",
+    "attachment_sha256",
+    "attachment_size_bytes",
+    "requested_at",
+    "attempted_at",
+    "sent_at",
+    "failed_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "invoice_id": { "type": "string", "format": "uuid" },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Order of the request for this invoice, starting at 1."
+    },
+    "recipient_email": {
+      "type": "string",
+      "format": "email",
+      "maxLength": 254
+    },
+    "status": {
+      "enum": ["pending", "sent", "failed"],
+      "description": "pending: queued or being sent. sent: the provider accepted the message. failed: the provider refused it or could not be reached."
+    },
+    "provider": {
+      "type": ["string", "null"],
+      "enum": ["smtp", "resend", null],
+      "description": "Provider that handled the attempt. Null until the worker picks the delivery up."
+    },
+    "provider_message_id": { "type": ["string", "null"] },
+    "error_code": {
+      "type": ["string", "null"],
+      "description": "Safe code such as EMAIL_PROVIDER_UNREACHABLE. Provider messages and credentials are never stored."
+    },
+    "error_message": { "type": ["string", "null"], "maxLength": 300 },
+    "attachment_sha256": {
+      "type": ["string", "null"],
+      "description": "SHA-256 of the PDF bytes that were attached. Set once the PDF was read back and checked, before the provider is called."
+    },
+    "attachment_size_bytes": { "type": ["integer", "null"], "minimum": 1 },
+    "requested_at": { "type": "string", "format": "date-time" },
+    "attempted_at": { "type": ["string", "null"], "format": "date-time" },
+    "sent_at": { "type": ["string", "null"], "format": "date-time" },
+    "failed_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
