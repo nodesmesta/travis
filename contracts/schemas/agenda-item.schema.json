@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/agenda-item.schema.json",
+  "title": "Agenda Item",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "title",
+    "type",
+    "start_at",
+    "end_at",
+    "timezone",
+    "status",
+    "source",
+    "metadata"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "context_point_id": { "type": ["string", "null"] },
+    "title": { "type": "string", "minLength": 1 },
+    "type": {
+      "enum": [
+        "flight",
+        "train",
+        "meeting",
+        "conference",
+        "event",
+        "meal",
+        "hotel_check_in",
+        "hotel_check_out",
+        "free_time",
+        "custom"
+      ]
+    },
+    "start_at": { "type": "string", "format": "date-time" },
+    "end_at": { "type": "string", "format": "date-time" },
+    "timezone": { "type": "string", "minLength": 1 },
+    "status": {
+      "enum": [
+        "suggested",
+        "planned",
+        "confirmed",
+        "completed",
+        "skipped",
+        "cancelled"
+      ]
+    },
+    "source": {
+      "enum": [
+        "user_input",
+        "booking_import",
+        "assistant_suggestion",
+        "event_discovery",
+        "external_provider"
+      ]
+    },
+    "metadata": { "type": "object", "additionalProperties": true }
+  }
+}
