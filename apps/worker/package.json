@@ -1,0 +1,20 @@
+{
+  "name": "@travelflow/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch --enable-source-maps dist/index.js",
+    "start": "node --enable-source-maps dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "@travelflow/api": "0.1.0",
+    "@travelflow/domain": "0.1.0",
+    "@travelflow/integrations": "0.1.0"
+  }
+}

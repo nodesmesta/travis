@@ -1,0 +1,28 @@
+{
+  "name": "@travelflow/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "entities": "^9.0.0",
+    "nodemailer": "^10.3.1",
+    "parse5": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.2"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "travelflow-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TravelFlow Assistant monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @travelflow/contracts && npm run build -w @travelflow/domain && npm run build -w @travelflow/integrations && npm run build -w @travelflow/api && npm run build -w @travelflow/worker && npm run build -w @travelflow/web",
+    "dev:api": "npm run dev --workspace @travelflow/api",
+    "dev:web": "npm run dev --workspace @travelflow/web",
+    "dev:worker": "npm run dev --workspace @travelflow/worker",
+    "typecheck": "npm run build -w @travelflow/contracts -w @travelflow/domain -w @travelflow/integrations >/dev/null && npm run typecheck --workspaces --if-present",
+    "lint": "npm run check:no-regex && npm run lint --workspaces --if-present",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,json}\" \"packages/**/*.{ts,json}\" \"scripts/**/*.mjs\" \"*.json\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,json}\" \"packages/**/*.{ts,json}\" \"scripts/**/*.mjs\" \"*.json\"",
+    "test": "npm run test --workspaces --if-present",
+    "validate:task-02": "node scripts/validate-task-02.mjs",
+    "validate:task-03": "node scripts/validate-task-03.mjs",
+    "validate:task-08": "node --env-file=.env.local scripts/validate-task-08.mjs",
+    "validate:task-09": "node --env-file=.env.local scripts/validate-task-09.mjs",
+    "validate:task-10": "node --env-file=.env.local scripts/validate-task-10.mjs",
+    "validate:task-11": "node --env-file=.env.local scripts/validate-task-11.mjs",
+    "validate:trips": "node --env-file=.env.local scripts/validate-task-trips.mjs",
+    "validate:contracts": "node scripts/validate-contracts.mjs",
+    "bootstrap:local": "node scripts/bootstrap-local.mjs",
+    "db:reset:local": "supabase db reset --yes",
+    "start:api:local": "node --env-file=.env.local --enable-source-maps apps/api/dist/index.js",
+    "start:worker:local": "node --env-file=.env.local --enable-source-maps apps/worker/dist/index.js",
+    "dev:web:local": "node --env-file=.env.local node_modules/next/dist/bin/next dev apps/web",
+    "smoke:providers": "bash -c 'set -a; . ./.env.local; set +a; bash scripts/provider-smoke-test.sh'",
+    "check:no-regex": "node scripts/check-no-regex.mjs",
+    "verify:deploy-local": "bash scripts/verify-deploy-local.sh",
+    "scan:secrets": "node --env-file=.env.local scripts/scan-secrets.mjs",
+    "validate:task-07": "node --env-file=.env.local scripts/validate-task-07.mjs",
+    "ui:golden-path": "node --env-file=.env.local scripts/ui-golden-path.mjs",
+    "verify:backup-restore": "bash scripts/verify-backup-restore.sh",
+    "validate:all": "node --env-file=.env.local scripts/validate-all.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "playwright": "^1.65.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.7.2"
+  }
+}
