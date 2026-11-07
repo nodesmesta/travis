@@ -1,0 +1,160 @@
+# TravelFlow app layer: web, api, worker, caddy.
+#
+# Supabase is NOT part of this file. It runs as its own stack (Supabase CLI or
+# the official self-hosted compose) and this stack joins its Docker network, so
+# api, worker, and caddy reach the gateway by container name. See deploy/README.md.
+#
+# Usage (from the deploy/ directory):
+#   cp .env.production.example .env.production   # fill in, chmod 600
+#   docker compose --env-file .env.production build
+#   docker compose --env-file .env.production up -d --wait
+#
+# Variables written as ${NAME:?message} are required: Compose refuses to start
+# and prints the message when they are missing. There are no default secrets.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-hardening: &hardening
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging: *default-logging
+
+services:
+  web:
+    <<: *hardening
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        # Fixed at build time (inlined into the browser bundle). Public values only.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set NEXT_PUBLIC_API_BASE_URL, for example https://app.example.com/api/v1}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set NEXT_PUBLIC_SUPABASE_URL, for example https://app.example.com}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    image: travelflow/web:${IMAGE_TAG:-latest}
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - edge
+    expose:
+      - "3000"
+
+  api:
+    <<: *hardening
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    image: travelflow/api:${IMAGE_TAG:-latest}
+    read_only: true
+    tmpfs:
+      - /tmp
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      # Fixed by the container contract; the env file cannot change them.
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: "4000"
+    # Healthcheck path comes from the Dockerfile (/health). Set API_HEALTHCHECK_PATH=/ready
+    # to gate the stack on dependency readiness once that endpoint is deployed.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "deploy/healthcheck.mjs",
+          "http://127.0.0.1:4000${API_HEALTHCHECK_PATH:-/health}",
+        ]
+      interval: 15s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+    networks:
+      - edge
+      - back
+      - supabase
+    expose:
+      - "4000"
+
+  worker:
+    <<: *hardening
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    image: travelflow/worker:${IMAGE_TAG:-latest}
+    read_only: true
+    tmpfs:
+      - /tmp
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+    networks:
+      - back
+      - supabase
+
+  caddy:
+    <<: *hardening
+    image: caddy:2-alpine
+    # All capabilities are dropped by the hardening anchor; Caddy only needs to bind 80/443.
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS to the public host name, for example app.example.com}
+      SUPABASE_AUTH_UPSTREAM: ${SUPABASE_AUTH_UPSTREAM:?set SUPABASE_AUTH_UPSTREAM, for example kong:8000}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # The only published ports of the stack. Production keeps the 80/443 defaults.
+    # A local test overrides them with a loopback bind (scripts/verify-deploy-local.sh).
+    ports:
+      - "${CADDY_HTTP_PUBLISH:-80:80}"
+      - "${CADDY_HTTPS_PUBLISH:-443:443}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:2019/config/",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - edge
+      - supabase
+
+networks:
+  # caddy <-> web <-> api
+  edge: {}
+  # api <-> worker. Neither is reachable from caddy through this network.
+  back: {}
+  # Network of the separate Supabase stack (must already exist).
+  supabase:
+    external: true
+    name: ${SUPABASE_DOCKER_NETWORK:?set SUPABASE_DOCKER_NETWORK to the Docker network of the Supabase stack}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

@@ -1,0 +1,13 @@
+# Local verification override. Used ONLY by scripts/verify-deploy-local.sh.
+# Never use it on a server.
+#
+# The local Supabase database is shared with the developer and holds queued
+# background jobs. A running worker claims and processes them, which would change
+# that data. By default the verification therefore points the worker at an
+# address that refuses connections: the image still starts and logs
+# `worker.started`, but it cannot read or write the database.
+# Set TF_VERIFY_WORKER_WITH_DB=1 when running the script to skip this override.
+services:
+  worker:
+    environment:
+      SUPABASE_URL: ${LOCALTEST_WORKER_SUPABASE_URL:?set by scripts/verify-deploy-local.sh}

@@ -1,0 +1,34 @@
+# Docker build context filter. Keeps secrets and build output out of every image.
+# The images are built from the repository root (context ".").
+
+# Secrets and local environment files. .env.local holds real keys and must never enter an image.
+.env
+.env.*
+**/.env
+**/.env.*
+deploy/.env.production
+deploy/*.env
+
+# Version control and editor state
+.git
+.gitignore
+.vscode
+.idea
+.kiro
+
+# Dependencies and build output are produced inside the image
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+**/coverage
+
+# Not needed to build or run the app layer
+supabase
+plan
+docs
+scripts
+README.md
+**/*.log
+.DS_Store

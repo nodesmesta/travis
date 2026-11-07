@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1
+#
+# TravelFlow web image (Next.js standalone output). Build from the repository root:
+#   docker build -f deploy/Dockerfile.web \
+#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://app.example.com/api/v1 \
+#     --build-arg NEXT_PUBLIC_SUPABASE_URL=https://app.example.com \
+#     --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key> \
+#     -t travelflow/web .
+#
+# NEXT_PUBLIC_* values are inlined into the browser bundle at BUILD time, not
+# read at run time. Changing any of them means rebuilding this image. They are
+# public by design: never pass the service role key or any other secret here.
+# The build fails when one of them is missing (no default).
+#
+# apps/web has no workspace dependencies (it imports no @travelflow/* package),
+# so only the web workspace is built. next.config.ts sets output: "standalone".
+
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/domain/package.json packages/domain/
+COPY packages/integrations/package.json packages/integrations/
+RUN npm ci --ignore-scripts
+
+COPY tsconfig.base.json ./
+COPY apps/web apps/web
+
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+RUN for name in NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do \
+      eval "value=\$$name"; \
+      if [ -z "$value" ]; then \
+        echo "build error: --build-arg $name is required (NEXT_PUBLIC_* values are fixed at build time)" >&2; \
+        exit 1; \
+      fi; \
+    done
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    NEXT_TELEMETRY_DISABLED=1
+RUN npm run build -w @travelflow/web
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+WORKDIR /app
+
+# Standalone output keeps the monorepo layout: the server is apps/web/server.js.
+COPY --from=build /app/apps/web/.next/standalone ./
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY deploy/healthcheck.mjs ./deploy/
+
+USER node
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=6s --start-period=20s --retries=3 \
+    CMD ["node", "deploy/healthcheck.mjs", "http://127.0.0.1:3000/"]
+
+CMD ["node", "apps/web/server.js"]
