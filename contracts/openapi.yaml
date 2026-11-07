@@ -1,0 +1,1868 @@
+openapi: 3.1.0
+info:
+  title: TravelFlow Assistant API
+  version: 0.1.0
+  description: |
+    Canonical HTTP contract for the TravelFlow core demo.
+    The core demo covers trip context, event discovery, internal booking,
+    and dummy payment. Provider secrets never appear in requests or responses.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Auth
+  - name: Trips
+  - name: Context Points
+  - name: Agenda
+  - name: Journey Legs
+  - name: Events
+  - name: Bookings
+  - name: Payments
+  - name: Mobility
+  - name: Places
+  - name: Assistant
+  - name: Alerts
+  - name: Invoices
+paths:
+  /health:
+    get:
+      tags: [Health]
+      security: []
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: { type: string, const: ok }
+                  service: { type: string }
+
+  /ready:
+    get:
+      tags: [Health]
+      security: []
+      operationId: getReadiness
+      summary: Readiness of this instance
+      description: |
+        `/health` only says the process is running. `/ready` also checks the database,
+        Auth, the private invoices bucket, and whether queued jobs are being claimed.
+        It answers 503 with the failing checks when any of them fails. Provider keys are
+        reported as configured or not; provider connectivity is not tested here.
+      responses:
+        '200':
+          description: Every check passed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+        '503':
+          description: At least one check is failing
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+
+  /metrics:
+    get:
+      tags: [Health]
+      security: []
+      operationId: getMetrics
+      summary: Process metrics in the Prometheus text format
+      description: |
+        Not part of the public API surface. The reverse proxy must not expose it. When
+        `METRICS_TOKEN` is set the request needs `Authorization: Bearer <token>`.
+      responses:
+        '200':
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getAuthenticatedUser
+      responses:
+        '200':
+          description: Authenticated user identity
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, request_id]
+                properties:
+                  request_id: { type: string }
+                  user:
+                    type: object
+                    required: [id]
+                    properties:
+                      id: { type: string }
+                      email: { type: [string, 'null'], format: email }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips:
+    get:
+      tags: [Trips]
+      operationId: listTrips
+      responses:
+        '200':
+          description: User-owned trips
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: './schemas/trip.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Trips]
+      operationId: createTrip
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTripRequest'
+      responses:
+        '201':
+          description: Trip created
+          content:
+            application/json:
+              schema: { $ref: './schemas/trip.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Trips]
+      operationId: getTrip
+      responses:
+        '200':
+          description: User-owned trip
+          content:
+            application/json:
+              schema: { $ref: './schemas/trip.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Trips]
+      operationId: updateTrip
+      description: |
+        `start_at` and `end_at` must carry a UTC offset and name a real
+        calendar day, or be null. `timezone` is an IANA name; a UTC offset
+        such as `+07:00` is rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1 }
+                destination_summary: { type: [string, 'null'] }
+                start_at: { type: [string, 'null'], format: date-time }
+                end_at: { type: [string, 'null'], format: date-time }
+                timezone: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Updated user-owned trip
+          content:
+            application/json:
+              schema: { $ref: './schemas/trip.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/transition:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Trips]
+      operationId: transitionTrip
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { type: string, enum: [confirmed, active, completed] }
+      responses:
+        '200':
+          description: Transitioned trip
+          content:
+            application/json:
+              schema: { $ref: './schemas/trip.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/context-points:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Context Points]
+      operationId: listContextPoints
+      responses:
+        '200':
+          description: Context points in the trip
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: './schemas/context-point.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Context Points]
+      operationId: createContextPoint
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContextPointRequest'
+      responses:
+        '201':
+          description: Context point created or awaiting clarification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextPointResult' }
+        '202':
+          description: Context point created and awaiting clarification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContextPointResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/context-points/{contextPointId}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: contextPointId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [resolve, confirm, archive] }
+    post:
+      tags: [Context Points]
+      operationId: contextPointCommand
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveContextPointRequest' }
+      responses:
+        '200':
+          description: Updated context point
+          content:
+            application/json:
+              schema: { $ref: './schemas/context-point.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/agenda-items:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Agenda]
+      operationId: listAgendaItems
+      responses:
+        '200':
+          description: Agenda items in the trip
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: './schemas/agenda-item.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Agenda]
+      operationId: createAgendaItem
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAgendaItemRequest' }
+      responses:
+        '201':
+          description: Agenda item created
+          content:
+            application/json:
+              schema: { $ref: './schemas/agenda-item.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/agenda-items/{agendaItemId}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: agendaItemId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [plan, confirm, cancel, complete] }
+    post:
+      tags: [Agenda]
+      operationId: agendaCommand
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Transitioned agenda item
+          content:
+            application/json:
+              schema: { $ref: './schemas/agenda-item.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/journey-legs:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Journey Legs]
+      operationId: listJourneyLegs
+      responses:
+        '200':
+          description: Journey legs in the trip
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: './schemas/journey-leg.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Journey Legs]
+      operationId: createJourneyLeg
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateJourneyLegRequest' }
+      responses:
+        '201':
+          description: Journey leg created
+          content:
+            application/json:
+              schema: { $ref: './schemas/journey-leg.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/journey-legs/{journeyLegId}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: journeyLegId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [start, complete, cancel] }
+    post:
+      tags: [Journey Legs]
+      operationId: journeyLegCommand
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Transitioned journey leg
+          content:
+            application/json:
+              schema: { $ref: './schemas/journey-leg.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/event-discoveries:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Events]
+      operationId: getLatestEventDiscovery
+      parameters:
+        - name: context_point_id
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Latest fresh event discovery result
+          content:
+            application/json:
+              schema: { $ref: './schemas/event-discovery.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Events]
+      operationId: discoverEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventDiscoveryRequest'
+      responses:
+        '200':
+          description: Normalized event discovery result
+          content:
+            application/json:
+              schema: { $ref: './schemas/event-discovery.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/journey-legs/{journeyLegId}/route-requests:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: journeyLegId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Mobility]
+      operationId: createRouteRequest
+      description: |
+        Calls HERE for the journey leg owned by the trip and compares the
+        options with the deterministic mobility engine. A provider failure,
+        a missing required fact, or an unresolved context point returns a
+        structured error and no route. The failed request is kept for audit.
+        Every POST makes new provider calls. The stored `retrieved_at` and
+        `expires_at` show how long the result stays valid.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRouteRequest' }
+      responses:
+        '201':
+          description: Compared route options
+          content:
+            application/json:
+              schema: { $ref: './schemas/route-request-result.schema.json' }
+        '404':
+          description: Trip or journey leg not found for this user
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        '422':
+          description: Context point unresolved, required fact missing, or provider returned no route
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        '503':
+          description: Provider not configured or unavailable
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    get:
+      tags: [Mobility]
+      operationId: listRouteRequests
+      responses:
+        '200':
+          description: Route requests for the journey leg, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, request_id]
+                additionalProperties: false
+                properties:
+                  request_id: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: './schemas/route-request.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/route-requests/{routeRequestId}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/RouteRequestId'
+    get:
+      tags: [Mobility]
+      operationId: getRouteRequest
+      responses:
+        '200':
+          description: Route request with options and evidence
+          content:
+            application/json:
+              schema: { $ref: './schemas/route-request-result.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/route-requests/{routeRequestId}/options:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/RouteRequestId'
+    get:
+      tags: [Mobility]
+      operationId: listRouteOptions
+      responses:
+        '200':
+          description: Route options ranked by the engine. Options of an expired request are marked expired in the freshness field.
+          content:
+            application/json:
+              schema: { $ref: './schemas/route-option-list.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/route-requests/{routeRequestId}/select:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/RouteRequestId'
+    post:
+      tags: [Mobility]
+      operationId: selectRouteOption
+      description: |
+        Stores the user's choice. It does not change the ranking, does not
+        book anything, and is refused for excluded or expired options.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [option_id]
+              additionalProperties: false
+              properties:
+                option_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Route request with the selected option
+          content:
+            application/json:
+              schema: { $ref: './schemas/route-request-result.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/weather:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Mobility]
+      operationId: listWeather
+      description: |
+        Latest fresh weather snapshot per active resolved context point.
+        Expired snapshots are never returned. Context points without a fresh
+        snapshot are listed in `missing_context_point_ids`.
+      parameters:
+        - name: context_point_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Fresh weather snapshots
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeatherList' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/weather/refresh:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Mobility]
+      operationId: refreshWeather
+      description: |
+        Returns a still-valid snapshot (`cache_status: hit`) or calls
+        OpenWeather once per context point (`miss`). Rate limited per user.
+        A provider failure is an error, not a stale snapshot.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                context_point_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Weather snapshots
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeatherList' }
+        '429':
+          description: Refresh rate limit reached
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        '503':
+          description: Provider not configured or unavailable
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/traffic:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Mobility]
+      operationId: listTraffic
+      description: |
+        Latest fresh traffic snapshot per origin and destination pair of the
+        trip's journey legs. Expired snapshots are never returned.
+      parameters:
+        - name: journey_leg_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Fresh traffic snapshots
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrafficList' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/traffic/refresh:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Mobility]
+      operationId: refreshTraffic
+      description: |
+        Returns a still-valid snapshot (`cache_status: hit`) or calls HERE
+        Traffic API v7 for the corridor of the journey leg (`miss`). Rate
+        limited per user. A provider failure is an error, not a stale snapshot.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [journey_leg_id]
+              additionalProperties: false
+              properties:
+                journey_leg_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Traffic snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrafficList' }
+        '429':
+          description: Refresh rate limit reached
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        '503':
+          description: Provider not configured or unavailable
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/recommendations:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Mobility]
+      operationId: listRecommendations
+      description: |
+        Stored mobility recommendations. Expired recommendations are omitted
+        unless `include_expired=true`, and are then marked `freshness: expired`.
+      parameters:
+        - name: include_expired
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Recommendations, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, request_id]
+                additionalProperties: false
+                properties:
+                  request_id: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: './schemas/recommendation.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/place-discoveries:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Places]
+      operationId: discoverPlaces
+      description: |
+        Finds activities (Bright Data) or restaurants (HERE Browse) near a
+        resolved context point. A valid cached run is returned without a
+        provider call. A provider failure is an error. Items without a source
+        or outside the requested place are rejected by the backend.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceDiscoveryRequest' }
+      responses:
+        '200':
+          description: Nearby places
+          content:
+            application/json:
+              schema: { $ref: './schemas/place-discovery.schema.json' }
+        '422':
+          description: Context point unresolved or request invalid
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        '503':
+          description: Provider not configured or unavailable
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    get:
+      tags: [Places]
+      operationId: getPlaceDiscovery
+      description: Latest run for the context point and category. An expired run returns PLACE_DISCOVERY_EXPIRED (410).
+      parameters:
+        - name: context_point_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: category
+          in: query
+          required: true
+          schema: { type: string, enum: [activity, restaurant] }
+      responses:
+        '200':
+          description: Latest fresh run
+          content:
+            application/json:
+              schema: { $ref: './schemas/place-discovery.schema.json' }
+        '410':
+          description: The latest run has expired
+          content:
+            application/json:
+              schema: { $ref: './schemas/error-envelope.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/bookings:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Bookings]
+      operationId: listBookings
+      responses:
+        '200':
+          description: User-owned bookings in the trip
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: './schemas/booking.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Bookings]
+      operationId: createBooking
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Draft or pending-payment booking
+          content:
+            application/json:
+              schema: { $ref: './schemas/booking.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/booking-quote:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Bookings]
+      operationId: getBookingQuote
+      summary: Price a booking before it is created
+      parameters:
+        - name: booking_type
+          in: query
+          required: true
+          schema: { type: string, enum: [event, activity, itinerary_item] }
+      responses:
+        '200':
+          description: Server-calculated price
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingQuote' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/bookings/{bookingId}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/BookingId'
+    get:
+      tags: [Bookings]
+      operationId: getBooking
+      responses:
+        '200':
+          description: Booking detail
+          content:
+            application/json:
+              schema: { $ref: './schemas/booking.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/bookings/{bookingId}/payments:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/BookingId'
+    get:
+      tags: [Payments]
+      operationId: listPayments
+      responses:
+        '200':
+          description: Payments for the user-owned booking
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: './schemas/payment.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Payments]
+      operationId: simulatePayment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulatePaymentRequest'
+      responses:
+        '201':
+          description: Simulated payment result and booking state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/bookings/{bookingId}/payments/{paymentId}/refund:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/BookingId'
+      - name: paymentId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+    post:
+      tags: [Payments]
+      operationId: refundPayment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Refunded payment and booking state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/conversations:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Assistant]
+      operationId: listConversations
+      responses:
+        '200':
+          description: Conversations of the trip, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, request_id]
+                properties:
+                  request_id: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: './schemas/conversation.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Assistant]
+      operationId: createConversation
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateConversationRequest' }
+      responses:
+        '201':
+          description: Conversation created
+          content:
+            application/json:
+              schema: { $ref: './schemas/conversation.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/conversations/{conversationId}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      tags: [Assistant]
+      operationId: getConversation
+      responses:
+        '200':
+          description: Conversation with its messages in order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationDetail' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/conversations/{conversationId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/ConversationId'
+    post:
+      tags: [Assistant]
+      operationId: sendConversationMessage
+      description: |
+        Runs one assistant turn (non-streaming). Ambiguous context returns a
+        clarification without calling any provider. A provider, planner, or
+        synthesis failure returns an error envelope (details carry
+        conversation_id and execution_id) and never an invented answer.
+
+        Tools the planner may use (read-only): discover_events, get_trip_summary,
+        get_recommendations, compare_routes, get_weather, get_traffic,
+        find_nearby_activities, find_nearby_restaurants. Route, weather, traffic,
+        and place figures in `cards` come from the providers and the mobility
+        engine unchanged; `cards[].recommended` and `cards[].rank` are set by the
+        engine, never by the model. A route or traffic question needs a start and
+        an end that the message named (or a stored journey leg); otherwise the
+        turn is a clarification. A provider whose key is not configured on the
+        server (HERE, OpenWeather) fails the turn with EXTERNAL_CONFIGURATION_MISSING
+        (HTTP 503), and a provider failure with an EXTERNAL_* code. The stored turn
+        keeps the error code and has no response.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+      responses:
+        '200':
+          description: Assistant turn result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/chat:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Assistant]
+      operationId: chatWithAssistant
+      description: Shortcut that uses the given conversation or the newest active one, or creates one.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+      responses:
+        '200':
+          description: Assistant turn result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/assistant-confirmations:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Assistant]
+      operationId: requestConfirmation
+      description: |
+        Issues a single-use confirmation token for one mutation, bound to the
+        user, trip, action, entity, and the state the user was shown. The
+        assistant uses the same mechanism when it proposes an action in chat.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequestConfirmationRequest' }
+      responses:
+        '201':
+          description: Confirmation request with its token
+          content:
+            application/json:
+              schema: { $ref: './schemas/confirmation-request.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/recommendations/{recommendationId}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: recommendationId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [save, apply, dismiss] }
+    post:
+      tags: [Assistant]
+      operationId: runRecommendationAction
+      description: |
+        Mutation guarded by a confirmation token and an Idempotency-Key.
+        `apply` is the only action that changes the itinerary. A `route`
+        recommendation becomes a planned travel block taken from its stored,
+        still valid route option; other types must carry `payload.itinerary_item`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmedActionRequest' }
+      responses:
+        '200':
+          description: Recommendation after the action
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecommendationActionResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/event-discovery-results/{resultId}/{action}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: resultId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1 }
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [save, expire] }
+    post:
+      tags: [Assistant]
+      operationId: runEventResultAction
+      description: |
+        `save` marks a suggested event as selected and adds a planned agenda
+        item in one transaction. `expire` marks a suggested event as expired.
+        Both need a confirmation token and an Idempotency-Key.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmedActionRequest' }
+      responses:
+        '200':
+          description: Event result after the action
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventResultActionResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/alerts:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Alerts]
+      operationId: listAlerts
+      description: |
+        In-app alerts created by the background worker, newest first. Alerts
+        are only shown inside the application. By default dismissed alerts and
+        alerts past `expires_at` are omitted; the counts of what was left out
+        are returned so the client can say so. An alert is never rebuilt from
+        data that has expired.
+      parameters:
+        - name: include_dismissed
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: include_expired
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Alerts of the trip
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertList' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/alerts/{alertId}/read:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/AlertId'
+    post:
+      tags: [Alerts]
+      operationId: markAlertRead
+      description: Marks an alert as read. Repeating the call keeps the first read time. A dismissed alert stays dismissed.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The alert after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/alerts/{alertId}/dismiss:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/AlertId'
+    post:
+      tags: [Alerts]
+      operationId: dismissAlert
+      description: Dismisses an alert. The alert row is kept, so the same condition in the same window does not create it again.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The alert after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/jobs:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Alerts]
+      operationId: listTripJobs
+      description: |
+        Background job executions of the trip, newest first, with the outcome
+        the worker recorded. Failed and interrupted jobs stay visible. Jobs are
+        created by the worker or by a manual rerun; there is no endpoint that
+        creates an arbitrary job.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: Jobs of the trip
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobList' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/jobs/{jobId}/rerun:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/JobId'
+    post:
+      tags: [Alerts]
+      operationId: rerunJob
+      description: |
+        Manual rerun of a failed or interrupted job. It creates a new queued
+        job with `parent_job_id` set to the job it repeats and the same
+        payload type. The original job is not changed. A job that is queued,
+        running, succeeded, or cancelled cannot be rerun, and a job that
+        already has an active rerun answers 409. The worker runs the new job
+        under the current policy, not by a hidden retry.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: The new job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/activity-log:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    get:
+      tags: [Assistant]
+      operationId: listTripActivityLog
+      description: Audit entries for the trip and its context points, agenda items, journey legs, event results, and bookings, newest first.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200':
+          description: Activity log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, request_id]
+                properties:
+                  request_id: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActivityLogEntry' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/bookings/{bookingId}/invoice:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/BookingId'
+    get:
+      tags: [Invoices]
+      operationId: getBookingInvoice
+      description: |
+        Invoice state of a booking the user owns. `eligible` is true only when
+        the booking has a payment with status `succeeded`; a failed, pending,
+        cancelled, or refunded payment is not eligible and `ineligible_reason`
+        says why. `invoice` is null until one was generated. Another user's
+        booking answers 404.
+      responses:
+        '200':
+          description: Eligibility, latest payment, and invoice
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingInvoiceState' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/bookings/{bookingId}/invoice/generate:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/BookingId'
+    post:
+      tags: [Invoices]
+      operationId: generateInvoice
+      description: |
+        Issues the invoice of a booking and stores its PDF in the private
+        bucket. The invoice is created only from a payment with status
+        `succeeded` (otherwise 409 `INVOICE_NOT_ELIGIBLE`). Calling it again,
+        with the same or another key, returns the same invoice (200) and never
+        creates a second one; the first call that creates it answers 201. A
+        previous PDF failure is resumed on the same invoice and number.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The invoice already existed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceResult' }
+        '201':
+          description: The invoice was created by this call
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/invoices/{invoiceId}/download:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/InvoiceId'
+    get:
+      tags: [Invoices]
+      operationId: downloadInvoice
+      description: |
+        Streams the invoice PDF from private storage after the server checked
+        ownership and compared the SHA-256 of the stored bytes with the stored
+        checksum. A mismatch answers 500 `INVOICE_CHECKSUM_MISMATCH` and no
+        bytes are sent. Another user's invoice answers 404. The bucket has no
+        public URL.
+      responses:
+        '200':
+          description: The PDF
+          headers:
+            X-Content-SHA256:
+              description: Lowercase hex SHA-256 of the body.
+              schema: { type: string }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/invoices/{invoiceId}/email:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/InvoiceId'
+    post:
+      tags: [Invoices]
+      operationId: emailInvoice
+      description: |
+        Requests an email with the booking confirmation and the invoice PDF to
+        the recipient the user typed. The invoice must be `issued` (otherwise
+        409 `INVOICE_NOT_READY`). The call records a new delivery with status
+        `pending` and queues one `send_invoice_email` job; the worker sends the
+        message once and records `sent` or `failed`. Sending again with a new
+        `Idempotency-Key` is a new request and a new delivery. The same key and
+        body return the same delivery and never send twice. There is no
+        automatic retry. A provider failure marks the delivery `failed` and
+        changes nothing about the booking, the payment, or the invoice. When no
+        email provider is configured the call answers 503
+        `EMAIL_PROVIDER_NOT_CONFIGURED` and records nothing.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailInvoiceRequest' }
+      responses:
+        '202':
+          description: The delivery request was recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailDeliveryResult' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/invoices/{invoiceId}/email-deliveries:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - $ref: '#/components/parameters/InvoiceId'
+    get:
+      tags: [Invoices]
+      operationId: listInvoiceEmailDeliveries
+      description: Email deliveries of the invoice, newest first.
+      responses:
+        '200':
+          description: Deliveries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailDeliveryList' }
+        default: { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TripId:
+      name: tripId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    RouteRequestId:
+      name: routeRequestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    AlertId:
+      name: alertId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Opaque client-generated key scoped to the operation and parent resource.
+      schema: { type: string, minLength: 16, maxLength: 200 }
+  responses:
+    Error:
+      description: Structured error
+      content:
+        application/json:
+          schema: { $ref: './schemas/error-envelope.schema.json' }
+  schemas:
+    AlertList:
+      type: object
+      required: [request_id, items, hidden_dismissed_count, hidden_expired_count]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        items:
+          type: array
+          items: { $ref: './schemas/alert.schema.json' }
+        hidden_dismissed_count:
+          type: integer
+          minimum: 0
+          description: Dismissed alerts left out of items.
+        hidden_expired_count:
+          type: integer
+          minimum: 0
+          description: Alerts left out because their data has expired.
+    AlertResult:
+      type: object
+      required: [request_id, alert]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        alert: { $ref: './schemas/alert.schema.json' }
+    JobList:
+      type: object
+      required: [request_id, items]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        items:
+          type: array
+          items: { $ref: './schemas/background-job.schema.json' }
+    JobResult:
+      type: object
+      required: [request_id, job]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        job: { $ref: './schemas/background-job.schema.json' }
+    CreateRouteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        required_facts:
+          type: array
+          description: Facts that must be available. Defaults to route only. A missing required fact is an error, not a guess.
+          uniqueItems: true
+          items: { type: string, enum: [route, traffic, weather] }
+        modes:
+          type: array
+          description: Modes to compare. Defaults to car, pedestrian, and transit.
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [car, taxi, pedestrian, transit] }
+        preferences:
+          type: object
+          additionalProperties: false
+          properties:
+            preferred_modes:
+              type: array
+              uniqueItems: true
+              items: { type: string, enum: [car, taxi, pedestrian, transit] }
+            max_walking_minutes: { type: number, minimum: 0 }
+            max_transfers: { type: integer, minimum: 0 }
+            budget_preference: { type: string, enum: [low, moderate, high] }
+            avoid_heavy_traffic: { type: boolean }
+            comfort_priority: { type: string, enum: [low, medium, high] }
+    WeatherList:
+      type: object
+      required: [items, missing_context_point_ids, request_id]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        items:
+          type: array
+          items: { $ref: './schemas/weather-snapshot.schema.json' }
+        missing_context_point_ids:
+          type: array
+          items: { type: string, format: uuid }
+    TrafficList:
+      type: object
+      required: [items, request_id]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        items:
+          type: array
+          items: { $ref: './schemas/traffic-snapshot.schema.json' }
+    PlaceDiscoveryRequest:
+      type: object
+      required: [context_point_id, category]
+      additionalProperties: false
+      properties:
+        context_point_id: { type: string, format: uuid }
+        category: { type: string, enum: [activity, restaurant] }
+        radius_meters:
+          type: integer
+          description: Search radius for restaurants. Defaults to 1000 and may not exceed 5000.
+          minimum: 100
+          maximum: 5000
+        language: { type: string, minLength: 2, maxLength: 10 }
+    PaymentResult:
+      type: object
+      required: [booking, payment]
+      additionalProperties: false
+      properties:
+        booking: { $ref: './schemas/booking.schema.json' }
+        payment: { $ref: './schemas/payment.schema.json' }
+    ContextPointResult:
+      type: object
+      required: [kind, context_point]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [created, awaiting_clarification] }
+        context_point: { $ref: './schemas/context-point.schema.json' }
+        clarification: { type: string }
+    ResolveContextPointRequest:
+      type: object
+      required: [latitude, longitude, timezone, external_place_id]
+      additionalProperties: false
+      properties:
+        label: { type: string, minLength: 1 }
+        address: { type: string }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        timezone: { type: string, minLength: 1 }
+        external_place_id: { type: string, minLength: 1 }
+    CreateAgendaItemRequest:
+      type: object
+      required: [title, type, start_at, end_at, timezone]
+      additionalProperties: false
+      properties:
+        context_point_id: { type: string }
+        title: { type: string, minLength: 1 }
+        type: { enum: [flight, train, meeting, conference, event, meal, hotel_check_in, hotel_check_out, free_time, custom] }
+        start_at: { type: string, format: date-time }
+        end_at: { type: string, format: date-time }
+        timezone: { type: string, minLength: 1 }
+        source: { enum: [user_input, booking_import, assistant_suggestion, event_discovery, external_provider] }
+    CreateJourneyLegRequest:
+      type: object
+      required: [origin_context_point_id, destination_context_point_id, departure_at]
+      additionalProperties: false
+      properties:
+        origin_context_point_id: { type: string, minLength: 1 }
+        destination_context_point_id: { type: string, minLength: 1 }
+        related_agenda_id: { type: string }
+        departure_at: { type: string, format: date-time }
+        arrival_deadline: { type: string, format: date-time }
+    CreateTripRequest:
+      type: object
+      additionalProperties: false
+      required: [name, timezone]
+      description: |
+        Creates a draft trip. `start_at` and `end_at` must carry a UTC offset
+        (`2026-11-12T09:00:00+07:00`) and name a real calendar day. `end_at`
+        must be after `start_at`. `timezone` is an IANA name such as
+        `Asia/Jakarta`; a UTC offset such as `+07:00` is rejected. A blank
+        `destination_summary` is stored as null. Errors are `400` with code
+        `TRIP_INVALID`, `REQUEST_INVALID`, or `TIMEZONE_INVALID`. Replaying
+        the same `Idempotency-Key` with the same body returns the same trip;
+        a different body returns `409 IDEMPOTENCY_CONFLICT`.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        destination_summary: { type: string, maxLength: 500 }
+        start_at: { type: string, format: date-time }
+        end_at: { type: string, format: date-time }
+        timezone: { type: string, minLength: 1 }
+        source: { type: string, enum: [user_input, imported_booking, internal] }
+    CreateContextPointRequest:
+      type: object
+      additionalProperties: false
+      required: [type, label, timezone]
+      properties:
+        type:
+          type: string
+          enum: [airport, station, hotel, meeting, conference, event, restaurant, attraction, custom_location]
+        label: { type: string, minLength: 1, maxLength: 160 }
+        address: { type: string, maxLength: 500 }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        timezone: { type: string, minLength: 1 }
+        external_place_id: { type: string, minLength: 1 }
+    EventDiscoveryRequest:
+      type: object
+      additionalProperties: false
+      required: [context_point_id, observed_for, filters]
+      properties:
+        context_point_id: { type: string, minLength: 1 }
+        observed_for:
+          type: object
+          additionalProperties: false
+          required: [from, to, timezone]
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            timezone: { type: string, minLength: 1 }
+        filters:
+          type: object
+          additionalProperties: false
+          required: [category]
+          properties:
+            category: { type: string, maxLength: 120 }
+            radius_preference: { type: string, enum: [walking, nearby, city] }
+            language: { type: string, maxLength: 20 }
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, checks, service, version, request_id]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        service: { type: string }
+        version: { type: string }
+        request_id: { type: string }
+        checks:
+          type: object
+          description: configuration, database, auth, storage, worker, and providers.
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [status]
+            properties:
+              status: { type: string, enum: [ok, failing, not_configured] }
+              code: { type: string }
+              detail: { type: object, additionalProperties: true }
+    CreateBookingRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Amounts are not part of the request. The server prices the booking from its
+        price policy (see GET /trips/{tripId}/booking-quote) and returns the result.
+      required: [booking_type, source_type, source_id]
+      properties:
+        booking_type: { type: string, enum: [event, activity, itinerary_item] }
+        source_type: { type: string, enum: [event_discovery_result, activity, agenda_item] }
+        source_id: { type: string, minLength: 1 }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+    BookingQuote:
+      type: object
+      additionalProperties: false
+      required: [policy_version, booking_type, currency, subtotal, tax, total, request_id]
+      properties:
+        policy_version: { type: string }
+        booking_type: { type: string, enum: [event, activity, itinerary_item] }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        subtotal: { type: number, minimum: 0 }
+        tax: { type: number, minimum: 0 }
+        total: { type: number, minimum: 0 }
+        request_id: { type: string }
+    SimulatePaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome: { type: string, enum: [succeeded, failed, pending, cancelled] }
+        failure_code: { type: string, minLength: 1, maxLength: 80 }
+
+    CreateConversationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        active_context_point_id: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1, maxLength: 160 }
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 2000 }
+        context_point_id:
+          type: string
+          minLength: 1
+          description: Context point the user selected in the UI. Omit for the whole trip.
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        conversation_id: { type: string, minLength: 1 }
+        message: { type: string, minLength: 1, maxLength: 2000 }
+        context_point_id: { type: string, minLength: 1 }
+    ConversationDetail:
+      type: object
+      required: [conversation, messages, request_id]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        conversation: { $ref: './schemas/conversation.schema.json' }
+        messages:
+          type: array
+          items: { $ref: './schemas/conversation-message.schema.json' }
+    ChatResult:
+      type: object
+      required: [conversation_id, user_message, assistant_message, response, execution, request_id]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        conversation_id: { type: string }
+        replayed:
+          type: boolean
+          description: True when the Idempotency-Key was already used and the stored answer is returned without a new execution.
+        user_message: { $ref: './schemas/conversation-message.schema.json' }
+        assistant_message: { $ref: './schemas/conversation-message.schema.json' }
+        response: { $ref: './schemas/assistant-response.schema.json' }
+        execution:
+          type: object
+          required: [execution_id, state, intent, latency_ms, tool_call_count, provider_call_count]
+          additionalProperties: false
+          properties:
+            execution_id: { type: string }
+            state: { type: string, enum: [completed, awaiting_clarification] }
+            intent: { type: string }
+            model: { type: string }
+            latency_ms: { type: integer, minimum: 0 }
+            planner_latency_ms: { type: integer, minimum: 0 }
+            synthesis_latency_ms: { type: integer, minimum: 0 }
+            tool_call_count: { type: integer, minimum: 0 }
+            provider_call_count: { type: integer, minimum: 0 }
+    RequestConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required: [action, entity_type, entity_id]
+      properties:
+        action:
+          type: string
+          enum: [save_event_result, expire_event_result, save_recommendation, apply_recommendation, dismiss_recommendation]
+        entity_type: { type: string, enum: [event_discovery_result, recommendation] }
+        entity_id: { type: string, minLength: 1 }
+    ConfirmedActionRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmation_token]
+      properties:
+        confirmation_token: { type: string, minLength: 32, maxLength: 200 }
+    RecommendationActionResult:
+      type: object
+      required: [recommendation_id, status, request_id]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        recommendation_id: { type: string }
+        status: { type: string }
+        agenda_item_id: { type: [string, 'null'] }
+    EventResultActionResult:
+      type: object
+      required: [event_result, agenda_item_id, request_id]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        event_result: { $ref: './schemas/event-item.schema.json' }
+        agenda_item_id: { type: [string, 'null'] }
+    ActivityLogEntry:
+      type: object
+      required: [id, action, resource_type, resource_id, metadata, created_at]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        action: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        metadata: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    InvoicePaymentSummary:
+      type: object
+      required: [id, payment_reference, status, amount, currency, paid_at]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        payment_reference: { type: string }
+        status: { enum: [pending, succeeded, failed, cancelled, refunded] }
+        amount: { type: number, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        paid_at: { type: [string, 'null'], format: date-time }
+    BookingInvoiceState:
+      type: object
+      required:
+        [request_id, booking_id, eligible, ineligible_reason, payment, invoice]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        booking_id: { type: string, format: uuid }
+        eligible:
+          type: boolean
+          description: True only when the booking has a payment with status succeeded.
+        ineligible_reason:
+          type: [string, 'null']
+          description: Why no invoice can be issued. Null when eligible.
+        payment:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/InvoicePaymentSummary'
+        invoice:
+          oneOf:
+            - type: 'null'
+            - $ref: './schemas/invoice.schema.json'
+    InvoiceResult:
+      type: object
+      required: [request_id, created, invoice]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        created: { type: boolean }
+        invoice: { $ref: './schemas/invoice.schema.json' }
+    EmailInvoiceRequest:
+      type: object
+      required: [recipient_email]
+      additionalProperties: false
+      properties:
+        recipient_email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+          description: Address the user confirmed. The server validates its form without a pattern and rejects control characters, spaces, and a missing domain.
+    EmailDeliveryResult:
+      type: object
+      required: [request_id, delivery]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        delivery: { $ref: './schemas/email-delivery.schema.json' }
+    EmailDeliveryList:
+      type: object
+      required: [request_id, items]
+      additionalProperties: false
+      properties:
+        request_id: { type: string }
+        items:
+          type: array
+          items: { $ref: './schemas/email-delivery.schema.json' }

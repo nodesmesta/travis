@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/error-envelope.schema.json",
+  "title": "Error Envelope",
+  "type": "object",
+  "required": ["error"],
+  "additionalProperties": false,
+  "properties": {
+    "error": {
+      "type": "object",
+      "required": ["code", "category", "message", "request_id"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable machine-readable error code in UPPER_SNAKE_CASE."
+        },
+        "category": {
+          "enum": [
+            "validation",
+            "authentication",
+            "authorization",
+            "not_found",
+            "conflict",
+            "provider",
+            "persistence",
+            "internal"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "request_id": { "type": "string", "minLength": 1 },
+        "execution_id": { "type": "string", "minLength": 1 },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
+}

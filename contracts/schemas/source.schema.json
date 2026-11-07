@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/source.schema.json",
+  "title": "Source",
+  "type": "object",
+  "required": ["id", "kind", "provider", "retrieved_at", "freshness"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "kind": {
+      "enum": [
+        "provider",
+        "official_page",
+        "search_result",
+        "user_input",
+        "internal"
+      ]
+    },
+    "provider": { "type": "string", "minLength": 1 },
+    "url": { "type": "string", "format": "uri" },
+    "title": { "type": "string", "maxLength": 300 },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired", "unavailable"] },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "observed_for": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" },
+        "timezone": { "type": "string" }
+      }
+    }
+  }
+}

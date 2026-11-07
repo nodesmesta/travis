@@ -1,0 +1,81 @@
+{
+  "trip": {
+    "id": "trip_demo_jakarta",
+    "user_id": "user_demo",
+    "name": "Jakarta Business Trip",
+    "destination_summary": "Jakarta, Indonesia",
+    "start_at": "2026-11-12T07:00:00+07:00",
+    "end_at": "2026-11-14T18:00:00+07:00",
+    "timezone": "Asia/Jakarta",
+    "status": "confirmed",
+    "source": "user_input",
+    "created_at": "2026-11-06T10:00:00Z",
+    "updated_at": "2026-11-06T10:00:00Z"
+  },
+  "context_point": {
+    "id": "context_jcc",
+    "trip_id": "trip_demo_jakarta",
+    "type": "conference",
+    "label": "Jakarta Convention Center",
+    "address": "Jl. Gatot Subroto, Jakarta",
+    "latitude": -6.2147,
+    "longitude": 106.8097,
+    "timezone": "Asia/Jakarta",
+    "external_place_id": "here_demo_jcc",
+    "status": "active",
+    "resolution_status": "resolved"
+  },
+  "event": {
+    "id": "event_demo_001",
+    "trip_id": "trip_demo_jakarta",
+    "context_point_id": "context_jcc",
+    "title": "Jakarta Business Networking Evening",
+    "description": "Demo event result backed by an external source.",
+    "venue_name": "Jakarta Convention Center",
+    "starts_at": "2026-11-12T18:30:00+07:00",
+    "ends_at": "2026-11-12T21:00:00+07:00",
+    "category": "business_events",
+    "status": "selected",
+    "source_ids": ["source_demo_event"]
+  },
+  "booking": {
+    "id": "booking_demo_001",
+    "user_id": "user_demo",
+    "trip_id": "trip_demo_jakarta",
+    "booking_type": "event",
+    "source_type": "event_discovery_result",
+    "source_id": "event_demo_001",
+    "provider_name": "internal",
+    "confirmation_code": "TF-DEMO-001",
+    "status": "confirmed",
+    "currency": "IDR",
+    "subtotal": 150000,
+    "tax": 15000,
+    "total": 165000,
+    "starts_at": "2026-11-12T18:30:00+07:00",
+    "ends_at": "2026-11-12T21:00:00+07:00",
+    "created_at": "2026-11-06T10:05:00Z",
+    "updated_at": "2026-11-06T10:06:00Z"
+  },
+  "payment": {
+    "id": "payment_demo_001",
+    "booking_id": "booking_demo_001",
+    "payment_reference": "SIM-DEMO-001",
+    "provider": "dummy_payment",
+    "mode": "simulated",
+    "amount": 165000,
+    "currency": "IDR",
+    "status": "succeeded",
+    "paid_at": "2026-11-06T10:06:00Z",
+    "created_at": "2026-11-06T10:05:30Z",
+    "updated_at": "2026-11-06T10:06:00Z"
+  },
+  "error": {
+    "error": {
+      "code": "EXTERNAL_PROVIDER_ERROR",
+      "category": "provider",
+      "message": "The requested live provider is unavailable.",
+      "request_id": "req_demo_error"
+    }
+  }
+}
