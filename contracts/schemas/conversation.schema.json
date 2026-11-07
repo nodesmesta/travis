@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/conversation.schema.json",
+  "title": "Conversation",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "active_context_point_id",
+    "title",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "active_context_point_id": { "type": ["string", "null"] },
+    "title": { "type": ["string", "null"], "maxLength": 160 },
+    "status": { "enum": ["active", "archived"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
