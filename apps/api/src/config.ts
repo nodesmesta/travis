@@ -16,6 +16,8 @@ export interface ApiConfig {
   brightDataEndpointOverride: string | undefined;
   hereApiKey: string | undefined;
   hereTimeoutMs: number;
+  liteApiKey: string | undefined;
+  liteApiTimeoutMs: number;
   /** Validation harness only: replaces HERE hosts. Rejected in production. */
   /** Browser origins allowed to call the API. Default: the local web dev server. */
   corsAllowedOrigins: string[];
@@ -197,6 +199,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
       env.HERE_TIMEOUT_MS,
       15000,
       "HERE_TIMEOUT_MS",
+    ),
+    liteApiKey: env.LITEAPI_API_KEY || undefined,
+    liteApiTimeoutMs: readPositiveNumber(
+      env.LITEAPI_TIMEOUT_MS,
+      30000,
+      "LITEAPI_TIMEOUT_MS",
     ),
     readyJobStaleSeconds: readPositiveNumber(
       env.READY_JOB_STALE_SECONDS,

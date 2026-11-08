@@ -54,6 +54,7 @@ import { queueInvoiceAfterPayment } from "./routes/invoices.js";
 import type { AuthenticatedSession, RequestContext } from "./routes/context.js";
 import { AppError, writeError } from "./errors.js";
 import { createLogger } from "./logger.js";
+import { LiteApiBookingRepository } from "./repositories/liteapi-booking-repository.js";
 import {
   SupabaseTripContextRepository,
   type TripUpdate,
@@ -79,6 +80,7 @@ import type {
   ContextPoint,
   JourneyLeg,
   Payment,
+  ProviderBooking,
   Trip,
 } from "./supabase/database.types.js";
 
@@ -146,6 +148,29 @@ function serializedBooking(booking: Booking): Record<string, unknown> {
     ...(booking.cancelled_at ? { cancelled_at: booking.cancelled_at } : {}),
     created_at: booking.created_at,
     updated_at: booking.updated_at,
+  };
+}
+
+function serializedProviderBooking(
+  providerBooking: ProviderBooking,
+): Record<string, unknown> {
+  return {
+    id: providerBooking.id,
+    booking_id: providerBooking.booking_id,
+    booking_type: providerBooking.booking_type,
+    provider: providerBooking.provider,
+    state: providerBooking.state,
+    provider_status: providerBooking.provider_status,
+    provider_booking_id: providerBooking.provider_booking_id,
+    client_reference: providerBooking.client_reference,
+    confirmation_code: providerBooking.confirmation_code,
+    currency: providerBooking.currency,
+    cancellation_fee: providerBooking.cancellation_fee,
+    refund_amount: providerBooking.refund_amount,
+    checkin: providerBooking.checkin,
+    checkout: providerBooking.checkout,
+    ticket_deadline: providerBooking.ticket_deadline,
+    last_reconciled_at: providerBooking.last_reconciled_at,
   };
 }
 
@@ -306,6 +331,7 @@ async function authenticateRequest(
 }
 
 async function authenticatedRepository(request: IncomingMessage): Promise<{
+  client: ReturnType<typeof createUserSupabaseClient>;
   user: AuthenticatedUser;
   repository: SupabaseTripContextRepository;
   service: TripContextService;
@@ -331,6 +357,7 @@ async function authenticatedRepository(request: IncomingMessage): Promise<{
   const eventDiscoveryRepository = new SupabaseEventDiscoveryRepository(client);
   const bookingPaymentRepository = new SupabaseBookingPaymentRepository(client);
   return {
+    client,
     user,
     repository,
     service: new TripContextService({
@@ -1050,7 +1077,8 @@ async function handleRequest(
   }
 
   if (paymentPath && method === "POST") {
-    const { user, commerce } = await authenticatedRepository(request);
+    const { user, client, commerce, bookingRepository } =
+      await authenticatedRepository(request);
     const body = await readJsonBody(request);
     const paymentInput = parsePaymentInput(body);
     const result = await commerce.simulatePayment(
@@ -1059,16 +1087,43 @@ async function handleRequest(
       paymentInput,
       commandContext(request, url.pathname, user.id, body),
     );
-    if (result.payment.status === "succeeded") {
+    let responseBooking = result.booking;
+    if (
+      result.payment.status === "succeeded" &&
+      result.booking.provider_name === "liteapi"
+    ) {
+      const providerRepository = new LiteApiBookingRepository(client);
+      const providerBooking =
+        await providerRepository.getProviderBookingByBooking(
+          result.booking.id,
+          paymentPath.tripId,
+        );
+      if (providerBooking) {
+        await providerRepository.updateProviderBooking(
+          providerBooking.id,
+          paymentPath.tripId,
+          { state: "paid", provider_status: "LOCAL_PAYMENT_SUCCEEDED" },
+        );
+        responseBooking = await providerRepository.updateLocalBooking(
+          result.booking.id,
+          paymentPath.tripId,
+          { status: "paid" },
+        );
+      }
+    }
+    if (
+      result.payment.status === "succeeded" &&
+      responseBooking.provider_name !== "liteapi"
+    ) {
       await queueInvoiceAfterPayment(
         config,
         logger,
-        result.booking.id,
+        responseBooking.id,
         requestId,
       );
     }
     writeJson(response, 201, {
-      booking: serializedBooking(result.booking),
+      booking: serializedBooking(responseBooking),
       payment: serializedPayment(result.payment),
       request_id: requestId,
     });
@@ -1110,7 +1165,7 @@ async function handleRequest(
 
   const bookingsTripId = bookingsTripIdFromPath(url.pathname);
   if (bookingsTripId && method === "GET") {
-    const { user, repository, bookingRepository } =
+    const { client, user, repository, bookingRepository } =
       await authenticatedRepository(request);
     const trip = await repository.getTripRowForUser(bookingsTripId, user.id);
     if (!trip)
@@ -1121,8 +1176,22 @@ async function handleRequest(
         "Trip was not found.",
       );
     const bookings = await bookingRepository.listBookings(bookingsTripId);
+    const providerBookings = await new LiteApiBookingRepository(
+      client,
+    ).listProviderBookings(bookingsTripId);
+    const providerByBooking = new Map(
+      providerBookings.map((item) => [item.booking_id, item]),
+    );
     writeJson(response, 200, {
-      items: bookings.map(serializedBooking),
+      items: bookings.map((booking) => {
+        const providerBooking = providerByBooking.get(booking.id);
+        return providerBooking
+          ? {
+              ...serializedBooking(booking),
+              provider_booking: serializedProviderBooking(providerBooking),
+            }
+          : serializedBooking(booking);
+      }),
       request_id: requestId,
     });
     return;

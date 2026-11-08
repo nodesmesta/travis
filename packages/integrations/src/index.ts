@@ -10,6 +10,7 @@ export * from "./provider-http.js";
 export * from "./here.js";
 export * from "./here-normalizers.js";
 export * from "./openweather.js";
+export * from "./liteapi.js";
 export * from "./place-discovery.js";
 export * from "./activity-pipeline.js";
 

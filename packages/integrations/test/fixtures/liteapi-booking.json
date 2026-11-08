@@ -1,0 +1,167 @@
+{
+  "hotelPrebook": {
+    "data": {
+      "prebookId": "rpagt_hh3",
+      "offerId": "AwJ2MQAAAABq8V9-PnEq3yUpPj97rL6NLS5b5pp4pWhncTku2y1Ou5WQRXCP2IchgSysw8pn68FmPCNW8A1B27aLctEarbWdAn5kE5krusdOT2nRSI_r-nEjuQUgozwKrDyBuy5w0yErqTBrbbNYjxmBPPjiVgYPF2VSppgq2XP43btxqEXjYG__FDdO8uA-40KZimC6jSykcqyKuAwHBnP8DgUk3k07VBfXDv9_OBStPP5T9OBpgnCuAD6PglTOmQvpt2U9koOTHUW3g3Bj0x7C3dE0pXGjbdziF_fQfMOuTYIBodFB3OHHVkdZOiGMB3x44JiY3opXHmV98VduJvyauML9Gi3V75hmlL6xpjxJPuxZFxHIOcLDTrExNTIgFuX2TG9wyHT0SxUEawUTA8iefnaiFjs1lKOigESVK6DJlW1r5obVqoxc7RNJVLFBmdoTGqdig1YAP4SVEXohhIP_GvmAPT_lwOtqaHRgFwcdqq87Z9PAJoiRBg9Bw90mUdr8Ac3D8opJZ5UxMZHJR6MM4YdEqmYP-X1kLiyaa9kNZBvcSUEN4L2wT8VqpDzATn5q5ZO3ZqOwqxj8Br0ZtGA9DdSCW-1hNOsgyuHCToIwlW0rvyxFsgfNcvZqeZpXHnSHtjznzGudXYtddAivrj-CzFwTsaYbtVrR-HYpcNkXYskRjJMCYEBg4tAWABbZh37FrXAZ3u-mUe3giKodPG3RtTiWmwPjmShwsDQCKkMn1n-SciIC4fHUgM5AE0XQ5HWZYfvsDtOL6_jGrOdvYNjWnupvCYz41pBTBpisosBRUPtri_rB78CCSHmzSqiWWdVhPV11Y-wmt8M3tDob3_HncPntCQsNIcP5DEdJwp1qoxZpMhsvFhFnw-JrAa40-29JBdYyqeFow5a8O-0BED39a848rC1LG3PZqkagwpkyIKpuBcn00lAyY5hZTEBsa-t_b-06n8dxOSSKfYdmRbvXiAZX4fr2D3S3ehs83LOll1jYCSZTvJ2bE4NGWxkOWmin8x0dCagYXk0fGMKMejwomIc0PO0BRL0BbYy4ZwKooMeNfRMEP5y7tFYBet39TZXSfEMCqkgIpIeAm3p8qA==",
+      "hotelId": "lpff41b",
+      "currency": "IDR",
+      "price": 2111856.43,
+      "priceDifferencePercent": 0,
+      "cancellationChanged": false,
+      "boardChanged": false,
+      "checkin": "2026-12-12",
+      "checkout": "2026-12-14",
+      "sellingPriceToUser": 2111856.43
+    }
+  },
+  "hotelBooking": {
+    "data": {
+      "bookingId": "_5XLCOI4h",
+      "status": "CONFIRMED",
+      "hotelConfirmationCode": "test",
+      "checkin": "2026-12-12",
+      "checkout": "2026-12-14",
+      "price": 1827964.43,
+      "currency": "IDR",
+      "sellingPriceToUser": 1827964.43,
+      "lastFreeCancellationDate": "2026-12-07T09:00:00Z",
+      "hotel": {
+        "hotelId": "lp1eec13",
+        "name": "Aston Kartika Grogol Hotel & Conference Center"
+      },
+      "sandbox": 1
+    },
+    "sandbox": true
+  },
+  "hotelCancel": {
+    "data": {
+      "bookingId": "_5XLCOI4h",
+      "cancellation_fee": 0,
+      "currency": "IDR",
+      "refund_amount": 1827964.43,
+      "status": "CANCELLED"
+    },
+    "sandbox": true
+  },
+  "flightPrebook": {
+    "data": {
+      "prebookId": "01a1b9bf-839a-7629-9a88-0ac8c7059d96",
+      "price": 1007436.08,
+      "currency": "IDR",
+      "transactionId": "",
+      "secretKey": "",
+      "paymentTypes": ["ACC_CREDIT_CARD"]
+    }
+  },
+  "flightBooking": {
+    "data": [
+      {
+        "bookingId": "01a1b8c8-60dd-703d-aeeb-f5617cfa04ab",
+        "bookingRef": "FH-26B-X3DW2923",
+        "status": "CONFIRMED",
+        "paymentStatus": "completed",
+        "ticketLimitTime": "2026-11-08T02:01:43.000Z",
+        "pricing": {
+          "subtotal": 1033821.31,
+          "totalAmount": 1033821.31,
+          "currency": "IDR"
+        },
+        "order": {
+          "reference": {
+            "orderId": "TESTA20261108093142972"
+          },
+          "status": "created",
+          "price": {
+            "currency": "USD",
+            "total": 55.03
+          },
+          "ticketLimitTime": "2026-11-08T02:01:43.000Z",
+          "timestamp": "2026-11-08T01:31:43.259Z"
+        },
+        "passengers": [
+          {
+            "title": "MR",
+            "firstName": "SANDBOX",
+            "lastName": "TESTER",
+            "birthday": "1990-01-15",
+            "gender": "M",
+            "nationality": "ID",
+            "documentType": "passport",
+            "documentNumber": "X0000000",
+            "documentIssueCountry": "ID",
+            "documentExpiry": "2031-01-01"
+          }
+        ]
+      }
+    ]
+  },
+  "flightBookingCreated": {
+    "data": [
+      {
+        "booking": {
+          "bookingId": "01a1b8c8-60dd-703d-aeeb-f5617cfa04ab",
+          "bookingRef": "",
+          "status": "PENDING_CONFIRMATION",
+          "pricing": {
+            "subtotal": 1033821.31,
+            "totalAmount": 1033821.31,
+            "currency": "IDR"
+          },
+          "passengers": [
+            {
+              "title": "MR",
+              "firstName": "SANDBOX",
+              "lastName": "TESTER",
+              "birthday": "1990-01-15",
+              "gender": "M",
+              "nationality": "ID",
+              "documentType": "passport",
+              "documentNumber": "X0000000",
+              "documentIssueCountry": "ID",
+              "documentExpiry": "2031-01-01"
+            }
+          ],
+          "ticketLimitTime": "2026-11-08T02:01:43.000Z"
+        },
+        "message": ""
+      }
+    ]
+  },
+  "flightQuote": {
+    "data": [
+      {
+        "confidence": "estimated",
+        "refund": {
+          "display": {
+            "amount": 892116.02,
+            "currency": "IDR"
+          }
+        },
+        "penalty": {
+          "display": {
+            "amount": 123254.08,
+            "currency": "IDR"
+          }
+        },
+        "tickets": [
+          {
+            "ticketNumber": "S74266",
+            "isRefundable": true
+          }
+        ],
+        "destination": "agency_deposit"
+      }
+    ]
+  },
+  "flightCancel": {
+    "data": {
+      "bookingId": "01a1b8c8-60dd-703d-aeeb-f5617cfa04ab",
+      "status": "CONFIRMED",
+      "cancellation_fee": 123254.08,
+      "refund_amount": 892116.02,
+      "currency": "IDR",
+      "refund_type": "partial",
+      "destination": "agency_deposit"
+    }
+  }
+}

@@ -3,8 +3,11 @@
 import AlertsView from "./views/alerts";
 import ActiveAlertsSummary from "./views/alerts-summary";
 import AssistantView from "./views/assistant";
+import BookingsView from "./views/bookings";
 import InvoicesView from "./views/invoices";
 import ItineraryView from "./views/itinerary";
+import FlightsView from "./views/flights";
+import HotelsView from "./views/hotels";
 import MobilityView from "./views/mobility";
 import TripsView from "./views/trips";
 import { VIEWS, type ViewId, type ViewProps } from "./views/types";
@@ -45,16 +48,47 @@ function formatMoney(currency: string, amount: number): string {
   return `${currency} ${new Intl.NumberFormat("en-US").format(amount)}`;
 }
 
-function formatDate(
-  value: string | null | undefined,
-  timezone = "Asia/Jakarta",
-) {
+function formatDate(value: string | null | undefined, timezone = "UTC") {
   if (!value) return "Date to be confirmed";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(value));
+}
+
+function datePart(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
+
+function timePart(value: string | null, timezone: string): string {
+  if (!value) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: timezone,
+  }).formatToParts(new Date(value));
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+  return hour && minute ? `${hour}:${minute}` : "";
+}
+
+function timezoneTimestamp(
+  date: string,
+  time: string,
+  timezone: string,
+): string {
+  const probe = new Date(`${date}T${time}:00Z`);
+  const zone =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(probe)
+      .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const offset = zone.replace("GMT", "") || "+00:00";
+  return `${date}T${time}:00${offset}`;
 }
 
 function friendlyError(error: unknown): string {
@@ -248,6 +282,98 @@ function LoginScreen({
   );
 }
 
+const EXPLORE_MODES = ["nearby", "stays", "flights"] as const;
+type ExploreMode = (typeof EXPLORE_MODES)[number];
+
+const EXPLORE_HEADERS: Record<
+  ExploreMode,
+  { eyebrow: string; title: string; lede: string; badge: string }
+> = {
+  nearby: {
+    eyebrow: "EXPLORE · NEARBY",
+    title: "What is happening around your trip?",
+    lede: "Pick a place from the trip, then see events and activities you can book without leaving the workspace.",
+    badge: "◎",
+  },
+  stays: {
+    eyebrow: "EXPLORE · STAYS",
+    title: "Find a stay that fits the trip.",
+    lede: "Rates come from LiteAPI. Results are live snapshots and a prebook reserves the provider rate in the sandbox only.",
+    badge: "⌂",
+  },
+  flights: {
+    eyebrow: "EXPLORE · FLIGHTS",
+    title: "Compare flights for the trip.",
+    lede: "Searches use live LiteAPI sandbox inventory. Ticketing uses the provider sandbox card and never charges a real card.",
+    badge: "✈",
+  },
+};
+
+function parseWorkspaceHash(hash: string): {
+  view: ViewId | null;
+  exploreMode: ExploreMode | null;
+} {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!raw) return { view: null, exploreMode: null };
+  const [first, second] = raw.split("/");
+  if (first === "explore" && exploreModeGuard(second)) {
+    return { view: "explore", exploreMode: second };
+  }
+  const known = VIEWS.some((item) => item.id === first);
+  return { view: known ? (first as ViewId) : null, exploreMode: null };
+}
+
+function exploreModeGuard(value: string | undefined): value is ExploreMode {
+  return (
+    typeof value === "string" &&
+    (EXPLORE_MODES as readonly string[]).includes(value)
+  );
+}
+
+function workspaceHash(view: ViewId, exploreMode: ExploreMode): string {
+  return view === "explore" ? `#explore/${exploreMode}` : `#${view}`;
+}
+
+function replaceHash(hash: string) {
+  if (window.location.hash !== hash) {
+    window.history.replaceState(null, "", hash);
+  }
+}
+
+function ExploreTabs({
+  active,
+  onChange,
+}: {
+  active: ExploreMode;
+  onChange: (mode: ExploreMode) => void;
+}) {
+  return (
+    <nav className="explore-tabs" aria-label="Explore categories">
+      <button
+        className={active === "nearby" ? "active" : undefined}
+        onClick={() => onChange("nearby")}
+        type="button"
+      >
+        Nearby
+      </button>
+      <button
+        className={active === "stays" ? "active" : undefined}
+        onClick={() => onChange("stays")}
+        type="button"
+      >
+        Stays
+      </button>
+      <button
+        className={active === "flights" ? "active" : undefined}
+        onClick={() => onChange("flights")}
+        type="button"
+      >
+        Flights
+      </button>
+    </nav>
+  );
+}
+
 function ContextSelector({
   points,
   selectedId,
@@ -307,11 +433,13 @@ function ContextSelector({
 function EventCard({
   event,
   sources,
+  timezone,
   selected,
   onSelect,
 }: {
   event: EventItem;
   sources: EventDiscoveryResponse["sources"];
+  timezone: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -326,7 +454,7 @@ function EventCard({
       </div>
       <h3>{event.title}</h3>
       <p className="event-meta">
-        <span>◷</span> {formatDate(event.starts_at)}
+        <span>◷</span> {formatDate(event.starts_at, timezone)}
       </p>
       <p className="event-meta">
         <span>⌖</span> {event.venue_name ?? "Venue details in source"}
@@ -507,6 +635,7 @@ function ViewHost({
       {view === "mobility" ? <MobilityView {...viewProps} /> : null}
       {view === "assistant" ? <AssistantView {...viewProps} /> : null}
       {view === "itinerary" ? <ItineraryView {...viewProps} /> : null}
+      {view === "bookings" ? <BookingsView {...viewProps} /> : null}
       {view === "alerts" ? <AlertsView {...viewProps} /> : null}
       {view === "invoices" ? <InvoicesView {...viewProps} /> : null}
     </>
@@ -530,10 +659,32 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState("business_events");
-  const [date, setDate] = useState("2026-11-12");
-  const [fromTime, setFromTime] = useState("18:00");
-  const [toTime, setToTime] = useState("23:00");
+  const [date, setDate] = useState("");
+  const [fromTime, setFromTime] = useState("");
+  const [toTime, setToTime] = useState("");
   const [view, setView] = useState<ViewId>("explore");
+  const [exploreMode, setExploreMode] = useState<ExploreMode>("nearby");
+
+  function showView(next: ViewId) {
+    setView(next);
+    replaceHash(workspaceHash(next, exploreMode));
+  }
+
+  function showExploreMode(next: ExploreMode) {
+    setExploreMode(next);
+    replaceHash(workspaceHash("explore", next));
+  }
+
+  useEffect(() => {
+    function syncFromHash() {
+      const parsed = parseWorkspaceHash(window.location.hash);
+      if (parsed.view) setView(parsed.view);
+      if (parsed.exploreMode) setExploreMode(parsed.exploreMode);
+    }
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   async function loadWorkspace() {
     setLoading(true);
@@ -570,6 +721,12 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   useEffect(() => {
     tripRef.current = trip;
   }, [trip]);
+
+  useEffect(() => {
+    setDate(datePart(trip?.start_at ?? null));
+    setFromTime(timePart(trip?.start_at ?? null, trip?.timezone ?? "UTC"));
+    setToTime(timePart(trip?.end_at ?? null, trip?.timezone ?? "UTC"));
+  }, [trip?.id, trip?.start_at, trip?.end_at, trip?.timezone]);
 
   function firstResolvedPoint(points: ContextPoint[]): ContextPoint | null {
     return (
@@ -679,8 +836,8 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
       const result = await discoverEvents(trip.id, {
         context_point_id: context.id,
         observed_for: {
-          from: `${date}T${fromTime}:00+07:00`,
-          to: `${date}T${toTime}:00+07:00`,
+          from: timezoneTimestamp(date, fromTime, context.timezone),
+          to: timezoneTimestamp(date, toTime, context.timezone),
           timezone: context.timezone,
         },
         filters: { category, radius_preference: "nearby", language: "en" },
@@ -785,12 +942,18 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
       </header>
       <div
         className={
-          view === "explore" ? "workspace-grid" : "workspace-grid two-column"
+          view === "explore" && exploreMode === "nearby"
+            ? "workspace-grid"
+            : "workspace-grid two-column"
         }
       >
         <aside className="sidebar">
           <div className="trip-summary">
-            <p className="eyebrow">JAKARTA, INDONESIA</p>
+            <p className="eyebrow">
+              {trip?.destination_summary ??
+                context?.label ??
+                "DESTINATION NOT SET"}
+            </p>
             <h2>{trip?.name ?? "Travel workspace"}</h2>
             <p>
               {trip?.start_at
@@ -804,11 +967,11 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 key={item.id}
                 className={view === item.id ? "active" : undefined}
                 aria-current={view === item.id ? "page" : undefined}
-                href={`#${item.id}`}
+                href={workspaceHash(item.id, exploreMode)}
                 title={item.hint}
                 onClick={(event) => {
                   event.preventDefault();
-                  setView(item.id);
+                  showView(item.id);
                 }}
               >
                 {item.label}
@@ -818,7 +981,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
           {trip ? (
             <ActiveAlertsSummary
               tripId={trip.id}
-              onOpen={() => setView("alerts")}
+              onOpen={() => showView("alerts")}
             />
           ) : null}
           <div className="sidebar-note">
@@ -831,143 +994,180 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
             <>
               <div className="welcome-row">
                 <div>
-                  <p className="eyebrow">GOOD TO HAVE YOU HERE</p>
-                  <h1>Make the next move feel easy.</h1>
-                  <p className="lede">
-                    Find something useful near your trip, then book it without
-                    losing the context.
+                  <p className="eyebrow">
+                    {EXPLORE_HEADERS[exploreMode].eyebrow}
                   </p>
+                  <h1>{EXPLORE_HEADERS[exploreMode].title}</h1>
+                  <p className="lede">{EXPLORE_HEADERS[exploreMode].lede}</p>
                 </div>
-                <span className="sun-badge">☼</span>
+                <span className="sun-badge">
+                  {EXPLORE_HEADERS[exploreMode].badge}
+                </span>
               </div>
               {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-              <ContextSelector
-                points={contexts}
-                selectedId={context?.id ?? null}
-                onSelect={(point) => {
-                  setContext(point);
-                  setDiscovery(null);
-                  setSelectedEvent(null);
-                  setBooking(null);
-                  setPayment(null);
-                }}
-              />
-              <section
-                className="panel discovery-panel"
-                id="discover"
-                aria-labelledby="discover-title"
-              >
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">LIVE DISCOVERY</p>
-                    <h2 id="discover-title">What is happening nearby?</h2>
-                  </div>
-                  <span className="tag sage">Context-aware</span>
-                </div>
-                <form className="discovery-form" onSubmit={searchEvents}>
-                  <label>
-                    Category
-                    <input
-                      value={category}
-                      onChange={(event) => setCategory(event.target.value)}
-                      placeholder="business events"
-                    />
-                  </label>
-                  <label>
-                    Date
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(event) => setDate(event.target.value)}
-                      required
-                    />
-                  </label>
-                  <label>
-                    From
-                    <input
-                      type="time"
-                      value={fromTime}
-                      onChange={(event) => setFromTime(event.target.value)}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Until
-                    <input
-                      type="time"
-                      value={toTime}
-                      onChange={(event) => setToTime(event.target.value)}
-                      required
-                    />
-                  </label>
-                  <button
-                    className="button accent search-button"
-                    disabled={busy || !context}
-                    type="submit"
+              <ExploreTabs active={exploreMode} onChange={showExploreMode} />
+              {exploreMode === "nearby" ? (
+                <>
+                  <ContextSelector
+                    points={contexts}
+                    selectedId={context?.id ?? null}
+                    onSelect={(point) => {
+                      setContext(point);
+                      setDiscovery(null);
+                      setSelectedEvent(null);
+                      setBooking(null);
+                      setPayment(null);
+                    }}
+                  />
+                  <section
+                    className="panel discovery-panel"
+                    id="discover"
+                    aria-labelledby="discover-title"
                   >
-                    {busy ? "Searching…" : "Find nearby"}
-                  </button>
-                </form>
-                {!context ? (
-                  <p className="helper-text">
-                    Choose a resolved context point before searching.
-                  </p>
+                    <div className="section-heading">
+                      <div>
+                        <p className="eyebrow">LIVE DISCOVERY</p>
+                        <h2 id="discover-title">What is happening nearby?</h2>
+                      </div>
+                      <span className="tag sage">Context-aware</span>
+                    </div>
+                    <form className="discovery-form" onSubmit={searchEvents}>
+                      <label>
+                        Category
+                        <input
+                          value={category}
+                          onChange={(event) => setCategory(event.target.value)}
+                          placeholder="business events"
+                        />
+                      </label>
+                      <label>
+                        Date
+                        <input
+                          type="date"
+                          value={date}
+                          onChange={(event) => setDate(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        From
+                        <input
+                          type="time"
+                          value={fromTime}
+                          onChange={(event) => setFromTime(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <label>
+                        Until
+                        <input
+                          type="time"
+                          value={toTime}
+                          onChange={(event) => setToTime(event.target.value)}
+                          required
+                        />
+                      </label>
+                      <button
+                        className="button accent search-button"
+                        disabled={busy || !context}
+                        type="submit"
+                      >
+                        {busy ? "Searching…" : "Find nearby"}
+                      </button>
+                    </form>
+                    {!context ? (
+                      <p className="helper-text">
+                        Choose a resolved context point before searching.
+                      </p>
+                    ) : (
+                      <p className="helper-text">
+                        Searching around <strong>{context.label}</strong> in{" "}
+                        {context.timezone}.
+                      </p>
+                    )}
+                  </section>
+                  <section className="results-section" aria-live="polite">
+                    <div className="section-heading">
+                      <div>
+                        <p className="eyebrow">YOUR SHORTLIST</p>
+                        <h2>Events and activities</h2>
+                      </div>
+                      {discovery ? (
+                        <span className="fresh-label">
+                          {discovery.freshness ?? "fresh"} ·{" "}
+                          {formatDate(discovery.retrieved_at, "UTC")}
+                        </span>
+                      ) : null}
+                    </div>
+                    {discovery?.limitations?.length ? (
+                      <details className="limitations">
+                        <summary>About this search</summary>
+                        {discovery.limitations.map((limitation) => (
+                          <p key={limitation}>{limitation}</p>
+                        ))}
+                      </details>
+                    ) : null}
+                    {discovery && activeEvents.length === 0 ? (
+                      <div className="empty-state">
+                        <span className="panel-icon">⌕</span>
+                        <h3>No matching events yet</h3>
+                        <p>
+                          Try a wider category or another time range. The live
+                          provider did not return a valid event for this search.
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="event-grid">
+                      {activeEvents.map((event) => (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          sources={selectedSource}
+                          timezone={
+                            context?.timezone ?? trip?.timezone ?? "UTC"
+                          }
+                          selected={selectedEvent?.id === event.id}
+                          onSelect={() => {
+                            if (selectedEvent?.id !== event.id) {
+                              setBooking(null);
+                              setPayment(null);
+                            }
+                            setSelectedEvent(event);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                </>
+              ) : exploreMode === "stays" ? (
+                trip ? (
+                  <HotelsView
+                    trip={trip}
+                    contexts={contexts}
+                    context={context}
+                    onSelectContext={(point) => setContext(point)}
+                    onOpenInvoices={() => showView("invoices")}
+                    onOpenBookings={() => showView("bookings")}
+                  />
                 ) : (
-                  <p className="helper-text">
-                    Searching around <strong>{context.label}</strong> in{" "}
-                    {context.timezone}.
-                  </p>
-                )}
-              </section>
-              <section className="results-section" aria-live="polite">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">YOUR SHORTLIST</p>
-                    <h2>Events and activities</h2>
-                  </div>
-                  {discovery ? (
-                    <span className="fresh-label">
-                      {discovery.freshness ?? "fresh"} ·{" "}
-                      {formatDate(discovery.retrieved_at, "UTC")}
-                    </span>
-                  ) : null}
-                </div>
-                {discovery?.limitations?.length ? (
-                  <details className="limitations">
-                    <summary>About this search</summary>
-                    {discovery.limitations.map((limitation) => (
-                      <p key={limitation}>{limitation}</p>
-                    ))}
-                  </details>
-                ) : null}
-                {discovery && activeEvents.length === 0 ? (
-                  <div className="empty-state">
-                    <span className="panel-icon">⌕</span>
-                    <h3>No matching events yet</h3>
-                    <p>
-                      Try a wider category or another time range. The live
-                      provider did not return a valid event for this search.
-                    </p>
-                  </div>
-                ) : null}
-                <div className="event-grid">
-                  {activeEvents.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      sources={selectedSource}
-                      selected={selectedEvent?.id === event.id}
-                      onSelect={() => {
-                        if (selectedEvent?.id !== event.id) {
-                          setBooking(null);
-                          setPayment(null);
-                        }
-                        setSelectedEvent(event);
-                      }}
-                    />
-                  ))}
-                </div>
-              </section>
+                  <StatusBanner tone="warning">
+                    Open a trip before searching stays.
+                  </StatusBanner>
+                )
+              ) : trip ? (
+                <FlightsView
+                  trip={trip}
+                  contexts={contexts}
+                  context={context}
+                  onSelectContext={(point) => setContext(point)}
+                  onOpenInvoices={() => showView("invoices")}
+                  onOpenBookings={() => showView("bookings")}
+                />
+              ) : (
+                <StatusBanner tone="warning">
+                  Open a trip before searching flights.
+                </StatusBanner>
+              )}
             </>
           ) : view === "trips" ? (
             <>
@@ -995,7 +1195,8 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 onSelectTrip: (id) => void selectTrip(id),
                 onTripsChanged: reloadTrips,
                 onContextsChanged: reloadContexts,
-                onOpenInvoices: () => setView("invoices"),
+                onOpenInvoices: () => showView("invoices"),
+                onOpenBookings: () => showView("bookings"),
               }}
               error={error}
             />
@@ -1005,7 +1206,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
             </StatusBanner>
           )}
         </section>
-        {view === "explore" ? (
+        {view === "explore" && exploreMode === "nearby" ? (
           <BookingPanel
             event={selectedEvent}
             booking={booking}
@@ -1015,7 +1216,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
             busy={busy}
             onCreate={() => void confirmBooking()}
             onPayment={(outcome) => void choosePayment(outcome)}
-            onOpenInvoices={() => setView("invoices")}
+            onOpenInvoices={() => showView("invoices")}
           />
         ) : null}
       </div>

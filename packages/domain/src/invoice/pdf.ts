@@ -11,7 +11,8 @@
  * Text uses WinAnsiEncoding. A character that WinAnsi cannot show is written as "?".
  */
 
-export type InvoiceBookingType = "event" | "activity" | "itinerary_item";
+export type InvoiceBookingType =
+  "event" | "activity" | "itinerary_item" | "hotel" | "flight";
 
 export interface InvoicePdfInput {
   invoiceNumber: string;
@@ -45,6 +46,8 @@ const BOOKING_LABEL: Record<InvoiceBookingType, string> = {
   event: "Event booking",
   activity: "Activity booking",
   itinerary_item: "Itinerary item booking",
+  hotel: "Hotel booking",
+  flight: "Flight booking",
 };
 
 /** Code points above U+00FF that WinAnsiEncoding places in 0x80-0x9F. */

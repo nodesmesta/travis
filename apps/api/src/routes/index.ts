@@ -3,6 +3,7 @@ import { alertRoutes } from "./alerts.js";
 import { assistantRoutes } from "./assistant.js";
 import { bookingQuoteRoutes } from "./booking-quote.js";
 import { invoiceRoutes } from "./invoices.js";
+import { liteApiRoutes } from "./liteapi.js";
 import { mobilityRoutes } from "./mobility.js";
 import { tripRoutes } from "./trips.js";
 
@@ -17,4 +18,5 @@ export const routeModules: RouteModule[] = [
   mobilityRoutes,
   alertRoutes,
   invoiceRoutes,
+  liteApiRoutes,
 ];

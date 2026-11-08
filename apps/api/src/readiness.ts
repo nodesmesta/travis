@@ -193,6 +193,7 @@ export async function checkReadiness(
       vultr_inference: configured(config.vultrInferenceApiKey),
       here: configured(config.hereApiKey),
       openweather: configured(config.openWeatherApiKey),
+      liteapi: configured(config.liteApiKey),
       email: configured(
         config.emailProvider === "resend"
           ? config.emailProviderApiKey

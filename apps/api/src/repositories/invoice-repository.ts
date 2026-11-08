@@ -188,6 +188,7 @@ export class SupabaseInvoiceRepository {
       if (error) throw persistenceFailure("agenda_items.title");
       return data?.title ?? null;
     }
+    if (booking.source_type === "liteapi_offer") return null;
     const { data, error } = await this.client
       .from("place_discovery_results")
       .select("name")

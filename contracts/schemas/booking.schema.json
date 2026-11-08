@@ -21,9 +21,16 @@
     "id": { "type": "string", "minLength": 1 },
     "user_id": { "type": "string", "minLength": 1 },
     "trip_id": { "type": "string", "minLength": 1 },
-    "booking_type": { "enum": ["event", "activity", "itinerary_item"] },
+    "booking_type": {
+      "enum": ["event", "activity", "itinerary_item", "hotel", "flight"]
+    },
     "source_type": {
-      "enum": ["event_discovery_result", "activity", "agenda_item"]
+      "enum": [
+        "event_discovery_result",
+        "activity",
+        "agenda_item",
+        "liteapi_offer"
+      ]
     },
     "source_id": { "type": "string", "minLength": 1 },
     "provider_name": { "type": "string", "minLength": 1 },

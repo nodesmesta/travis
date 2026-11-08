@@ -25,6 +25,8 @@ const BOOKING_LABEL: Record<InvoiceBookingType, string> = {
   event: "Event booking",
   activity: "Activity booking",
   itinerary_item: "Itinerary item booking",
+  hotel: "Hotel booking",
+  flight: "Flight booking",
 };
 
 function oneLine(value: string): string {

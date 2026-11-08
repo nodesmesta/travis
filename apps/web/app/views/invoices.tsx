@@ -73,9 +73,10 @@ export default function InvoicesView({ trip }: ViewProps) {
           <p className="eyebrow">RECEIPTS AND EMAIL</p>
           <h2 id="invoices-title">Invoices</h2>
           <p className="helper-text">
-            An invoice is issued only for a booking whose payment succeeded.
-            Download the PDF here or have it emailed to an address you confirm.
-            An email problem never changes your booking or payment.
+            An invoice is issued after a provider or internal booking is
+            confirmed and its sandbox payment succeeds. Download the PDF here or
+            have it emailed to an address you confirm. An email problem never
+            changes your booking or payment.
           </p>
         </div>
       </div>
@@ -104,8 +105,9 @@ export default function InvoicesView({ trip }: ViewProps) {
         <div className="empty-state">
           <h3>No paid bookings yet</h3>
           <p>
-            Book an event or an activity and pay with the dummy payment. The
-            invoice appears here once the payment succeeds.
+            Book an event, activity, hotel, or flight and complete its payment.
+            The invoice appears here once the provider or internal booking is
+            confirmed.
           </p>
         </div>
       ) : null}
