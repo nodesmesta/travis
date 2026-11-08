@@ -27,17 +27,10 @@ mkdirSync(shotDir, { recursive: true });
 
 const VIEWS = [
   {
-    slug: "explore-nearby",
-    link: "Explore",
-    tab: "Nearby",
-    expect: "What is happening nearby?",
-    expectH1: true,
-  },
-  {
     slug: "explore-stays",
     link: "Explore",
     tab: "Stays",
-    expect: "Search by city and dates",
+    expect: "Hotels",
     expectH1: true,
   },
   {

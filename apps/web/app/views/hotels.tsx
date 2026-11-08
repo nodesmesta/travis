@@ -18,6 +18,13 @@ import {
   providerStateLabel,
   providerStateTone,
 } from "./provider-booking-parts";
+import {
+  COUNTRIES,
+  CURRENCIES,
+  guessCity,
+  guessCountryCode,
+} from "./places-options";
+import { useTraveller } from "./use-traveller";
 import type { ViewProps } from "./types";
 
 function datePart(value: string | null): string {
@@ -80,10 +87,10 @@ function HotelCard({
         type="button"
       >
         {selected
-          ? "Prebooked in sandbox"
+          ? "Rate reserved"
           : busy
             ? "Reserving…"
-            : "Prebook rate"}
+            : "Reserve this rate"}
       </button>
     </article>
   );
@@ -94,13 +101,14 @@ export default function HotelsView({
   onOpenInvoices,
   onOpenBookings,
 }: ViewProps) {
-  const [city, setCity] = useState(trip.destination_summary ?? "");
+  const traveller = useTraveller();
+  const [city, setCity] = useState("");
   const [countryCode, setCountryCode] = useState("");
-  const [checkin, setCheckin] = useState(datePart(trip.start_at));
-  const [checkout, setCheckout] = useState(datePart(trip.end_at));
+  const [checkin, setCheckin] = useState("");
+  const [checkout, setCheckout] = useState("");
   const [adults, setAdults] = useState("1");
-  const [nationality, setNationality] = useState("");
-  const [currency, setCurrency] = useState("");
+  const [nationality, setNationality] = useState("ID");
+  const [currency, setCurrency] = useState("USD");
   const [holderFirstName, setHolderFirstName] = useState("");
   const [holderLastName, setHolderLastName] = useState("");
   const [holderEmail, setHolderEmail] = useState("");
@@ -113,18 +121,33 @@ export default function HotelsView({
   const [prebookingOffer, setPrebookingOffer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The trip answers the questions the traveller should not have to answer:
+  // where, when, and (when the destination names a country) which country.
   useEffect(() => {
-    setCity(trip.destination_summary ?? "");
+    setCity(guessCity(trip.destination_summary));
+    setCountryCode(guessCountryCode(trip.destination_summary));
     setCheckin(datePart(trip.start_at));
     setCheckout(datePart(trip.end_at));
-    setNationality("");
-    setCurrency("");
     setResult(null);
     setPrebook(null);
     setBooked(null);
     setPrebookedOfferId(null);
     setError(null);
   }, [trip]);
+
+  // The session answers the holder block; the traveller only adds a phone.
+  useEffect(() => {
+    setHolderFirstName((current) => current || traveller.firstName);
+    setHolderLastName((current) => current || traveller.lastName);
+    setHolderEmail((current) => current || traveller.email);
+  }, [traveller]);
+
+  const holderMissing = [
+    holderFirstName.trim() ? null : "first name",
+    holderLastName.trim() ? null : "last name",
+    holderEmail.trim() ? null : "email",
+    holderPhone.trim() ? null : "phone",
+  ].filter((value): value is string => value !== null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -168,7 +191,7 @@ export default function HotelsView({
   }
 
   async function payAndBook() {
-    if (!prebook) return;
+    if (!prebook || holderMissing.length > 0) return;
     setBusy(true);
     setError(null);
     try {
@@ -178,17 +201,17 @@ export default function HotelsView({
         prebook.provider_booking.id,
         {
           holder: {
-            first_name: holderFirstName,
-            last_name: holderLastName,
-            email: holderEmail,
-            phone: holderPhone,
+            first_name: holderFirstName.trim(),
+            last_name: holderLastName.trim(),
+            email: holderEmail.trim(),
+            phone: holderPhone.trim(),
           },
           guests: [
             {
               occupancy_number: 1,
-              first_name: holderFirstName,
-              last_name: holderLastName,
-              email: holderEmail,
+              first_name: holderFirstName.trim(),
+              last_name: holderLastName.trim(),
+              email: holderEmail.trim(),
             },
           ],
         },
@@ -210,10 +233,12 @@ export default function HotelsView({
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">HOTEL AVAILABILITY</p>
-            <h2 id="hotel-search-title">Search by city and dates</h2>
+            <p className="eyebrow">STEP 1 · FIND A RATE</p>
+            <h2 id="hotel-search-title">
+              {city ? `Hotels in ${city}` : "Search hotels"}
+            </h2>
           </div>
-          <span className="tag sage">Server-side provider</span>
+          <span className="tag sage">LiteAPI sandbox</span>
         </div>
         <form className="discovery-form" onSubmit={submit}>
           <label>
@@ -225,15 +250,19 @@ export default function HotelsView({
             />
           </label>
           <label>
-            Country code
-            <input
-              maxLength={2}
+            Country
+            <select
               value={countryCode}
-              onChange={(event) =>
-                setCountryCode(event.target.value.toUpperCase())
-              }
+              onChange={(event) => setCountryCode(event.target.value)}
               required
-            />
+            >
+              <option value="">Choose</option>
+              {COUNTRIES.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.code} · {country.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Check-in
@@ -253,39 +282,6 @@ export default function HotelsView({
               required
             />
           </label>
-          <label>
-            Adults
-            <input
-              min="1"
-              max="9"
-              type="number"
-              value={adults}
-              onChange={(event) => setAdults(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Guest nationality
-            <input
-              maxLength={2}
-              value={nationality}
-              onChange={(event) =>
-                setNationality(event.target.value.toUpperCase())
-              }
-              required
-            />
-          </label>
-          <label>
-            Currency
-            <input
-              maxLength={3}
-              value={currency}
-              onChange={(event) =>
-                setCurrency(event.target.value.toUpperCase())
-              }
-              required
-            />
-          </label>
           <button
             className="button accent search-button"
             disabled={busy}
@@ -294,12 +290,58 @@ export default function HotelsView({
             {busy ? "Searching…" : "Search hotels"}
           </button>
         </form>
+        <details className="limitations">
+          <summary>Guests and rate settings</summary>
+          <div className="discovery-form">
+            <label>
+              Adults
+              <input
+                min="1"
+                max="9"
+                type="number"
+                value={adults}
+                onChange={(event) => setAdults(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Guest nationality
+              <select
+                value={nationality}
+                onChange={(event) => setNationality(event.target.value)}
+                required
+              >
+                {COUNTRIES.map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.code} · {country.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Currency
+              <select
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value)}
+                required
+              >
+                {CURRENCIES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </details>
       </section>
       {result ? (
         <section className="results-section" aria-live="polite">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">AVAILABLE RATES</p>
+              <p className="eyebrow">
+                {prebook ? "STEP 3 · GUEST DETAILS" : "STEP 2 · PICK A RATE"}
+              </p>
               <h2>
                 {result.total_found && result.total_found > result.hotels.length
                   ? `${result.hotels.length} of ${result.total_found} hotels`
@@ -313,20 +355,29 @@ export default function HotelsView({
           </div>
           {prebook ? (
             <div className="status-banner success">
-              <strong>Rate prebooked.</strong> {money(prebook.prebook.total)}{" "}
-              through {prebook.prebook.checkin} to {prebook.prebook.checkout}.
-              Complete the guest details and sandbox payment to book it.
+              <strong>Rate reserved.</strong> {money(prebook.prebook.total)}{" "}
+              from {prebook.prebook.checkin} to {prebook.prebook.checkout}. Add
+              the phone number to book it with the sandbox card.
             </div>
           ) : null}
           {prebook && booked === null ? (
             <div className="panel payment-choice">
               <p className="eyebrow">GUEST DETAILS</p>
+              <p>
+                Reserved rate{" "}
+                {prebookedOfferId
+                  ? `· ${prebookedOfferId.slice(0, 12)}…`
+                  : ""}{" "}
+                · {money(prebook.prebook.total)} ·{" "}
+                {prebook.prebook.checkin} → {prebook.prebook.checkout}
+              </p>
               <div className="discovery-form">
                 <label>
                   First name
                   <input
                     value={holderFirstName}
                     onChange={(event) => setHolderFirstName(event.target.value)}
+                    required
                   />
                 </label>
                 <label>
@@ -334,6 +385,7 @@ export default function HotelsView({
                   <input
                     value={holderLastName}
                     onChange={(event) => setHolderLastName(event.target.value)}
+                    required
                   />
                 </label>
                 <label>
@@ -342,6 +394,7 @@ export default function HotelsView({
                     type="email"
                     value={holderEmail}
                     onChange={(event) => setHolderEmail(event.target.value)}
+                    required
                   />
                 </label>
                 <label>
@@ -349,24 +402,36 @@ export default function HotelsView({
                   <input
                     value={holderPhone}
                     onChange={(event) => setHolderPhone(event.target.value)}
+                    placeholder="digits only, no +"
+                    required
                   />
                 </label>
               </div>
               <button
                 className="button accent"
-                disabled={busy}
+                disabled={busy || holderMissing.length > 0}
                 onClick={() => void payAndBook()}
                 type="button"
               >
                 {busy ? "Paying and booking…" : "Pay sandbox payment and book"}
               </button>
+              {holderMissing.length > 0 ? (
+                <p className="helper-text" role="status">
+                  Still needed: {holderMissing.join(", ")}.
+                </p>
+              ) : (
+                <p className="helper-text">
+                  The sandbox card pays {currency} and the provider returns a
+                  confirmation code.
+                </p>
+              )}
             </div>
           ) : null}
           {booked ? (
             <div className="provider-result">
               <div className="provider-result-head">
                 <div>
-                  <p className="eyebrow">PROVIDER RESULT</p>
+                  <p className="eyebrow">STEP 4 · BOOKED</p>
                   <span className="provider-label">Confirmation code</span>
                   <strong className="provider-code">
                     {booked.provider_booking.confirmation_code ??
@@ -413,7 +478,7 @@ export default function HotelsView({
             <div className="empty-state">
               <span className="panel-icon">⌕</span>
               <h3>No hotel rates found</h3>
-              <p>Try another date range or city.</p>
+              <p>Try another date range, city, or country.</p>
             </div>
           ) : (
             <div className="event-grid">
