@@ -16,7 +16,7 @@ import type {
 export function newIdempotencyKey(operation: string): string {
   const random =
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return `travelflow-${operation}-${random}`.slice(0, 200);
+  return `travis-${operation}-${random}`.slice(0, 200);
 }
 
 function tripPath(tripId: string): string {

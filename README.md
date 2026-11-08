@@ -1,6 +1,6 @@
-# TravelFlow Assistant
+# Travis Assistant
 
-TravelFlow Assistant is a business-travel companion that works from a confirmed trip. It keeps the trip context (places, agenda, journey legs, timezone) in one place and answers questions against it with sourced, time-stamped information.
+Travis is a business-travel companion that works from a confirmed trip. It keeps the trip context (places, agenda, journey legs, timezone) in one place and answers questions against it with sourced, time-stamped information.
 
 Built for the lablab.ai hackathon, Challenge 2 "Powering the Future of Work". Infrastructure target: Vultr. Live web data: Bright Data.
 
@@ -8,7 +8,7 @@ Built for the lablab.ai hackathon, Challenge 2 "Powering the Future of Work". In
 
 ## The problem
 
-After a business trip is booked, the traveler still searches by hand: what is happening near the venue, how to get from the hotel to the meeting, whether rain or traffic will break the schedule, where to eat, and then paperwork for whatever was booked. TravelFlow keeps the trip context so the traveler does not repeat it for every question, and it shows where every live fact came from and when it was retrieved.
+After a business trip is booked, the traveler still searches by hand: what is happening near the venue, how to get from the hotel to the meeting, whether rain or traffic will break the schedule, where to eat, and then paperwork for whatever was booked. Travis keeps the trip context so the traveler does not repeat it for every question, and it shows where every live fact came from and when it was retrieved.
 
 ## What is implemented, and how well it is verified
 

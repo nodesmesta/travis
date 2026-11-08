@@ -148,7 +148,7 @@ export function evaluateDepartureReminder(
       source_ids: [],
       internal_source: {
         title: `Journey leg from ${leg.origin_label} to ${leg.destination_label}`,
-        provider: "travelflow_journey_leg",
+        provider: "travis_journey_leg",
         retrieved_at: retrievedAt,
         expires_at: expiresAt,
         observed_for: {

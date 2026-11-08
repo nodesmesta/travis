@@ -46,7 +46,7 @@ async function accessToken(): Promise<string> {
 function idempotencyKey(operation: string): string {
   const random =
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return `travelflow-${operation}-${random}`.slice(0, 200);
+  return `travis-${operation}-${random}`.slice(0, 200);
 }
 
 export async function request<T>(
