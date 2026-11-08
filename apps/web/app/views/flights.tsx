@@ -20,6 +20,7 @@ import {
   providerStateTone,
 } from "./provider-booking-parts";
 import { CURRENCIES } from "./places-options";
+import { SearchField } from "./search-fields";
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
 
@@ -126,6 +127,11 @@ export default function FlightsView({
   const [currency, setCurrency] = useState("USD");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{
+    origin?: string;
+    destination?: string;
+    date?: string;
+  }>({});
 
   useEffect(() => {
     if (trip && openedTripId.current === trip.id) {
@@ -177,8 +183,26 @@ export default function FlightsView({
     return created.id;
   }
 
+  function swapAirports() {
+    setOrigin(destination);
+    setDestination(origin);
+  }
+
+  function validate(): boolean {
+    const next: { origin?: string; destination?: string; date?: string } = {};
+    if (origin.trim().length !== 3) next.origin = "Three-letter airport code.";
+    if (destination.trim().length !== 3)
+      next.destination = "Three-letter airport code.";
+    if (origin && origin === destination)
+      next.destination = "Origin and destination are the same.";
+    if (!date) next.date = "Choose a departure date.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!validate()) return;
     setBusy(true);
     setError(null);
     setSelected(null);
@@ -283,78 +307,85 @@ export default function FlightsView({
     <div className="view-stack">
       {error ? <div className="status-banner error">{error}</div> : null}
       <section
-        className="panel discovery-panel"
         aria-labelledby="flight-search-title"
+        className="panel search-panel"
       >
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">STEP 1 · FIND A ROUTE</p>
-            <h2 id="flight-search-title">
-              {origin && destination
-                ? `${origin} → ${destination}`
-                : "Search a route"}
-            </h2>
-          </div>
-          <span className="tag coral">LiteAPI sandbox</span>
-        </div>
-        <form className="discovery-form" onSubmit={search}>
-          <label>
-            Origin
+        <h2 className="sr-only" id="flight-search-title">
+          Search flights
+        </h2>
+        <form className="search-bar flights" onSubmit={search} noValidate>
+          <SearchField className="grow" error={errors.origin} label="From">
             <input
+              autoComplete="off"
               maxLength={3}
-              value={origin}
               onChange={(event) => setOrigin(event.target.value.toUpperCase())}
               placeholder="CGK"
-              required
+              value={origin}
             />
-          </label>
-          <label>
-            Destination
+          </SearchField>
+          <button
+            aria-label="Swap origin and destination"
+            className="swap-button"
+            onClick={swapAirports}
+            type="button"
+          >
+            ⇄
+          </button>
+          <SearchField className="grow" error={errors.destination} label="To">
             <input
+              autoComplete="off"
               maxLength={3}
-              value={destination}
               onChange={(event) =>
                 setDestination(event.target.value.toUpperCase())
               }
               placeholder="SIN"
-              required
+              value={destination}
             />
-          </label>
-          <label>
-            Departure
+          </SearchField>
+          <SearchField error={errors.date} hint="One way" label="Departure">
             <input
+              min={dateFromToday(0)}
+              onChange={(event) => setDate(event.target.value)}
               type="date"
               value={date}
-              onChange={(event) => setDate(event.target.value)}
-              required
             />
-          </label>
-          <label>
-            Currency
-            <select
-              value={currency}
-              onChange={(event) => setCurrency(event.target.value)}
-              required
-            >
-              {CURRENCIES.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </label>
+          </SearchField>
+          <SearchField label="Travellers">
+            <span className="stepper">
+              <span className="stepper-value">1 adult</span>
+            </span>
+          </SearchField>
           <button
-            className="button accent search-button"
+            className="button accent search-bar-submit"
             disabled={busy}
             type="submit"
           >
-            {busy ? "Searching…" : "Search flights"}
+            {busy ? "Searching…" : "Search"}
           </button>
         </form>
-        <p className="helper-text">
-          Airport codes are three letters. One adult, one passenger per booking
-          in this sandbox.
-        </p>
+        <div className="search-foot">
+          <span>
+            One way · fares in {currency} · airport codes are three letters
+          </span>
+          <details className="search-options">
+            <summary>Fare settings</summary>
+            <div className="search-options-body">
+              <label>
+                Currency
+                <select
+                  onChange={(event) => setCurrency(event.target.value)}
+                  value={currency}
+                >
+                  {CURRENCIES.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
+        </div>
       </section>
       {result ? (
         <section className="results-section" aria-live="polite">
@@ -389,16 +420,26 @@ export default function FlightsView({
         </section>
       ) : null}
       {selected ? (
-        <section className="panel payment-choice">
-          <p className="eyebrow">
-            STEP 3 · PASSENGER AND SANDBOX CHECKOUT
-          </p>
-          <p>
-            {selected.segments[0]?.carrier_name ?? "Selected flight"} ·{" "}
-            {money(selected.cheapest.total)}. The provider requires a travel
-            document for this fare.
-          </p>
-          <div className="discovery-form">
+        <section className="panel checkout-panel">
+          <div className="checkout-head">
+            <div>
+              <p className="eyebrow">STEP 3 · PASSENGER DETAILS</p>
+              <h3>
+                {selected.segments[0]?.carrier_name ?? "Selected flight"} ·{" "}
+                {selected.segments[0]?.origin_code} →{" "}
+                {selected.segments[selected.segments.length - 1]?.destination_code}
+              </h3>
+              <p>
+                {date} · one adult · the provider requires a passport for this
+                fare
+              </p>
+            </div>
+            <div className="checkout-price">
+              <span>Total</span>
+              <strong>{money(selected.cheapest.total)}</strong>
+            </div>
+          </div>
+          <div className="checkout-grid">
             <label>
               First name
               <input

@@ -19,11 +19,16 @@ import {
   providerStateTone,
 } from "./provider-booking-parts";
 import {
+  CITIES,
   COUNTRIES,
   CURRENCIES,
+  countryForCity,
+  countryLabel,
   guessCity,
   guessCountryCode,
+  nightsBetween,
 } from "./places-options";
+import { GuestStepper, SearchField } from "./search-fields";
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
 
@@ -51,6 +56,13 @@ function errorText(error: unknown): string {
   if (error instanceof ApiClientError) return error.message;
   return error instanceof Error ? error.message : "Hotel request failed.";
 }
+
+type HotelErrors = {
+  city?: string;
+  country?: string;
+  checkin?: string;
+  checkout?: string;
+};
 
 function HotelCard({
   hotel,
@@ -120,9 +132,10 @@ export default function HotelsView({
   const [countryCode, setCountryCode] = useState("");
   const [checkin, setCheckin] = useState("");
   const [checkout, setCheckout] = useState("");
-  const [adults, setAdults] = useState("1");
+  const [adults, setAdults] = useState(1);
   const [nationality, setNationality] = useState("ID");
   const [currency, setCurrency] = useState("USD");
+  const [errors, setErrors] = useState<HotelErrors>({});
   const [holderFirstName, setHolderFirstName] = useState("");
   const [holderLastName, setHolderLastName] = useState("");
   const [holderEmail, setHolderEmail] = useState("");
@@ -154,6 +167,7 @@ export default function HotelsView({
     setPrebook(null);
     setBooked(null);
     setPrebookedOfferId(null);
+    setErrors({});
     setError(null);
   }, [trip]);
 
@@ -171,13 +185,15 @@ export default function HotelsView({
     holderPhone.trim() ? null : "phone",
   ].filter((value): value is string => value !== null);
 
+  const nights = nightsBetween(checkin, checkout);
+
   /** Hotels are booked into a trip; open one from the search when there is none. */
   async function requireTrip(): Promise<string> {
     if (activeTripId) return activeTripId;
-    const country = COUNTRIES.find((item) => item.code === countryCode);
+    const label = countryLabel(countryCode);
     const created = await onEnsureTrip({
       name: `${city} stay`.slice(0, 160),
-      destination: (country ? `${city}, ${country.label}` : city).slice(0, 500),
+      destination: (label ? `${city}, ${label}` : city).slice(0, 500),
       startDate: checkin,
       endDate: checkout,
     });
@@ -186,8 +202,20 @@ export default function HotelsView({
     return created.id;
   }
 
+  function validate(): boolean {
+    const next: HotelErrors = {};
+    if (!city.trim()) next.city = "Where are you going?";
+    if (!countryCode) next.country = "Pick the country of the city.";
+    if (!checkin) next.checkin = "Choose a check-in date.";
+    if (!checkout) next.checkout = "Choose a check-out date.";
+    else if (nights <= 0) next.checkout = "Check-out must be after check-in.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!validate()) return;
     setBusy(true);
     setError(null);
     setPrebook(null);
@@ -201,7 +229,7 @@ export default function HotelsView({
           country_code: countryCode,
           checkin,
           checkout,
-          adults: Number(adults),
+          adults,
           currency,
           guest_nationality: nationality,
           limit: 20,
@@ -268,112 +296,127 @@ export default function HotelsView({
     <div className="view-stack">
       {error ? <div className="status-banner error">{error}</div> : null}
       <section
-        className="panel discovery-panel"
         aria-labelledby="hotel-search-title"
+        className="panel search-panel"
       >
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">STEP 1 · FIND A RATE</p>
-            <h2 id="hotel-search-title">
-              {city ? `Hotels in ${city}` : "Search hotels"}
-            </h2>
-          </div>
-          <span className="tag sage">LiteAPI sandbox</span>
-        </div>
-        <form className="discovery-form" onSubmit={submit}>
-          <label>
-            City
+        <h2 className="sr-only" id="hotel-search-title">
+          Search stays
+        </h2>
+        <form className="search-bar stays" onSubmit={submit} noValidate>
+          <SearchField className="grow" error={errors.city} label="Where">
             <input
+              autoComplete="off"
+              list="hotel-city-options"
+              onChange={(event) => {
+                const value = event.target.value;
+                setCity(value);
+                const auto = countryForCity(value);
+                if (auto) setCountryCode(auto);
+              }}
+              placeholder="City or area"
               value={city}
-              onChange={(event) => setCity(event.target.value)}
-              required
             />
-          </label>
-          <label>
-            Country
+            <datalist id="hotel-city-options">
+              {CITIES.map((item) => (
+                <option key={`${item.name}-${item.country}`} value={item.name}>
+                  {countryLabel(item.country)}
+                </option>
+              ))}
+            </datalist>
+          </SearchField>
+          <SearchField
+            error={errors.checkin ?? errors.checkout}
+            hint={
+              nights > 0
+                ? `${nights} ${nights === 1 ? "night" : "nights"}`
+                : undefined
+            }
+            label="Check-in → Check-out"
+          >
+            <span className="date-range">
+              <input
+                aria-label="Check-in"
+                min={dateFromToday(0)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setCheckin(value);
+                  if (checkout && value >= checkout) setCheckout("");
+                }}
+                type="date"
+                value={checkin}
+              />
+              <span aria-hidden="true" className="date-arrow">
+                →
+              </span>
+              <input
+                aria-label="Check-out"
+                min={checkin || dateFromToday(1)}
+                onChange={(event) => setCheckout(event.target.value)}
+                type="date"
+                value={checkout}
+              />
+            </span>
+          </SearchField>
+          <SearchField error={errors.country} label="Country">
             <select
-              value={countryCode}
               onChange={(event) => setCountryCode(event.target.value)}
-              required
+              value={countryCode}
             >
               <option value="">Choose</option>
               {COUNTRIES.map((country) => (
                 <option key={country.code} value={country.code}>
-                  {country.code} · {country.label}
+                  {country.label}
                 </option>
               ))}
             </select>
-          </label>
-          <label>
-            Check-in
-            <input
-              type="date"
-              value={checkin}
-              onChange={(event) => setCheckin(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Check-out
-            <input
-              type="date"
-              value={checkout}
-              onChange={(event) => setCheckout(event.target.value)}
-              required
-            />
-          </label>
+          </SearchField>
+          <SearchField label="Guests">
+            <GuestStepper onChange={setAdults} value={adults} />
+          </SearchField>
           <button
-            className="button accent search-button"
+            className="button accent search-bar-submit"
             disabled={busy}
             type="submit"
           >
-            {busy ? "Searching…" : "Search hotels"}
+            {busy ? "Searching…" : "Search"}
           </button>
         </form>
-        <details className="limitations">
-          <summary>Guests and rate settings</summary>
-          <div className="discovery-form">
-            <label>
-              Adults
-              <input
-                min="1"
-                max="9"
-                type="number"
-                value={adults}
-                onChange={(event) => setAdults(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Guest nationality
-              <select
-                value={nationality}
-                onChange={(event) => setNationality(event.target.value)}
-                required
-              >
-                {COUNTRIES.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.code} · {country.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Currency
-              <select
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                required
-              >
-                {CURRENCIES.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </details>
+        <div className="search-foot">
+          <span>
+            Rates in {currency} · guest nationality {nationality}
+          </span>
+          <details className="search-options">
+            <summary>Rate settings</summary>
+            <div className="search-options-body">
+              <label>
+                Guest nationality
+                <select
+                  onChange={(event) => setNationality(event.target.value)}
+                  value={nationality}
+                >
+                  {COUNTRIES.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Currency
+                <select
+                  onChange={(event) => setCurrency(event.target.value)}
+                  value={currency}
+                >
+                  {CURRENCIES.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </details>
+        </div>
       </section>
       {result ? (
         <section className="results-section" aria-live="polite">
@@ -385,7 +428,8 @@ export default function HotelsView({
               <h2>
                 {result.total_found && result.total_found > result.hotels.length
                   ? `${result.hotels.length} of ${result.total_found} hotels`
-                  : `${result.hotels.length} hotels found`}
+                  : `${result.hotels.length} hotels`}{" "}
+                in {city}
               </h2>
             </div>
             <span className="fresh-label">
@@ -401,70 +445,74 @@ export default function HotelsView({
             </div>
           ) : null}
           {prebook && booked === null ? (
-            <div className="panel payment-choice">
-              <p className="eyebrow">GUEST DETAILS</p>
-              <p>
-                Reserved rate{" "}
-                {prebookedOfferId
-                  ? `· ${prebookedOfferId.slice(0, 12)}…`
-                  : ""}{" "}
-                · {money(prebook.prebook.total)} ·{" "}
-                {prebook.prebook.checkin} → {prebook.prebook.checkout}
-              </p>
-              <div className="discovery-form">
-                <label>
-                  First name
+            <div className="panel checkout-panel">
+              <div className="checkout-head">
+                <div>
+                  <p className="eyebrow">GUEST DETAILS</p>
+                  <h3>
+                    {city} stay · {adults} {adults === 1 ? "adult" : "adults"}
+                  </h3>
+                  <p>
+                    {prebook.prebook.checkin} → {prebook.prebook.checkout} ·{" "}
+                    {nights} {nights === 1 ? "night" : "nights"}
+                  </p>
+                </div>
+                <div className="checkout-price">
+                  <span>Total</span>
+                  <strong>{money(prebook.prebook.total)}</strong>
+                </div>
+              </div>
+              <div className="search-bar checkout">
+                <SearchField label="First name">
                   <input
-                    value={holderFirstName}
+                    autoComplete="given-name"
                     onChange={(event) => setHolderFirstName(event.target.value)}
-                    required
+                    value={holderFirstName}
                   />
-                </label>
-                <label>
-                  Last name
+                </SearchField>
+                <SearchField label="Last name">
                   <input
-                    value={holderLastName}
+                    autoComplete="family-name"
                     onChange={(event) => setHolderLastName(event.target.value)}
-                    required
+                    value={holderLastName}
                   />
-                </label>
-                <label>
-                  Email
+                </SearchField>
+                <SearchField label="Email">
                   <input
+                    autoComplete="email"
+                    onChange={(event) => setHolderEmail(event.target.value)}
                     type="email"
                     value={holderEmail}
-                    onChange={(event) => setHolderEmail(event.target.value)}
-                    required
                   />
-                </label>
-                <label>
-                  Phone
+                </SearchField>
+                <SearchField hint="digits only, no +" label="Phone">
                   <input
-                    value={holderPhone}
+                    autoComplete="tel-national"
+                    inputMode="tel"
                     onChange={(event) => setHolderPhone(event.target.value)}
-                    placeholder="digits only, no +"
-                    required
+                    value={holderPhone}
                   />
-                </label>
+                </SearchField>
               </div>
-              <button
-                className="button accent"
-                disabled={busy || holderMissing.length > 0}
-                onClick={() => void payAndBook()}
-                type="button"
-              >
-                {busy ? "Paying and booking…" : "Pay sandbox payment and book"}
-              </button>
-              {holderMissing.length > 0 ? (
-                <p className="helper-text" role="status">
-                  Still needed: {holderMissing.join(", ")}.
-                </p>
-              ) : (
-                <p className="helper-text">
-                  The sandbox card pays {currency} and the provider returns a
-                  confirmation code.
-                </p>
-              )}
+              <div className="checkout-actions">
+                <button
+                  className="button accent"
+                  disabled={busy || holderMissing.length > 0}
+                  onClick={() => void payAndBook()}
+                  type="button"
+                >
+                  {busy ? "Paying and booking…" : "Pay sandbox payment and book"}
+                </button>
+                {holderMissing.length > 0 ? (
+                  <p className="helper-text" role="status">
+                    Still needed: {holderMissing.join(", ")}.
+                  </p>
+                ) : (
+                  <p className="helper-text">
+                    The sandbox card pays {currency}. No real card is charged.
+                  </p>
+                )}
+              </div>
             </div>
           ) : null}
           {booked ? (

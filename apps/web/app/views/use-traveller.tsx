@@ -34,9 +34,9 @@ export function useTraveller(): TravellerDefaults {
 
   useEffect(() => {
     let active = true;
-    const supabase = getSupabaseBrowserClient();
 
     async function load() {
+      const supabase = getSupabaseBrowserClient();
       const { data } = await supabase.auth.getUser();
       const user = data.user;
       if (!active || !user) return;
@@ -57,7 +57,10 @@ export function useTraveller(): TravellerDefaults {
       });
     }
 
-    void load();
+    void load().catch(() => {
+      // No session or no Supabase configuration: the fields stay empty and the
+      // traveller types them, which is the pre-existing behaviour.
+    });
     return () => {
       active = false;
     };
