@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/conversation-message.schema.json",
+  "title": "Conversation Message",
+  "description": "Assistant messages carry the structured response (never the raw confirmation token) and tool metadata. Failed turns are stored with status failed and an error code, never with an invented answer.",
+  "type": "object",
+  "required": [
+    "id",
+    "conversation_id",
+    "role",
+    "content",
+    "status",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "conversation_id": { "type": "string", "minLength": 1 },
+    "role": { "enum": ["user", "assistant"] },
+    "content": { "type": "string", "minLength": 1, "maxLength": 8000 },
+    "status": { "enum": ["received", "completed", "clarification", "failed"] },
+    "intent": { "type": "string", "maxLength": 60 },
+    "error_code": { "type": "string", "maxLength": 80 },
+    "request_id": { "type": "string" },
+    "execution_id": { "type": "string" },
+    "response": { "$ref": "./assistant-response.schema.json" },
+    "tool_call_metadata": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool_name", "status", "duration_ms"],
+        "additionalProperties": false,
+        "properties": {
+          "tool_name": { "type": "string" },
+          "status": { "enum": ["ok", "empty", "failed"] },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "error_code": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } },
+          "entity_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

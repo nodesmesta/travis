@@ -1,0 +1,54 @@
+# TravelFlow reverse proxy (the only service published on the host).
+#
+# Required environment (Compose passes them; there are no defaults):
+#   SITE_ADDRESS            Public host name, for example app.example.com.
+#                           Caddy gets and renews a Let's Encrypt certificate
+#                           automatically for a real domain. For a local test
+#                           only, ":8088" serves plain HTTP with no certificate.
+#   SUPABASE_AUTH_UPSTREAM  host:port of the Supabase API gateway (Kong) on the
+#                           shared Docker network, for example kong:8000.
+#
+# No regular expressions: only literal paths and glob matchers.
+
+# The Caddy admin API stays on its default loopback address inside the
+# container. It is not published; the Compose healthcheck uses it.
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Metrics are for the internal network only. Block them before any proxying.
+	# The matcher is case-insensitive.
+	@metrics path /metrics /metrics/* /api/v1/metrics /api/v1/metrics/*
+	handle @metrics {
+		respond "Not Found" 404
+	}
+
+	# Browser sign-in talks to Supabase Auth through this same origin, so the
+	# gateway needs no public domain of its own. Only the Auth API is forwarded;
+	# REST, Storage, Realtime, and Studio are never reachable from the internet.
+	@supabase_auth path /auth/v1/*
+	handle @supabase_auth {
+		reverse_proxy {$SUPABASE_AUTH_UPSTREAM}
+	}
+
+	# API and health probes.
+	@api path /api/* /health /ready
+	handle @api {
+		reverse_proxy api:4000
+	}
+
+	# Everything else is the web application.
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/route-request-result.schema.json",
+  "title": "Route Request Result",
+  "description": "A route request with its options, recommendation, evidence, and the weather and traffic used.",
+  "type": "object",
+  "required": [
+    "request_id",
+    "route_request",
+    "options",
+    "recommended_option_id",
+    "departure_recommendation",
+    "facts",
+    "limitations",
+    "sources",
+    "weather",
+    "traffic"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "route_request": { "$ref": "./route-request.schema.json" },
+    "options": {
+      "type": "array",
+      "items": { "$ref": "./route-option.schema.json" }
+    },
+    "recommended_option_id": { "type": ["string", "null"], "format": "uuid" },
+    "departure_recommendation": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": [
+            "depart_at",
+            "latest_departure_at",
+            "buffer_seconds",
+            "policy_version",
+            "reason_codes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "depart_at": { "type": "string", "format": "date-time" },
+            "latest_departure_at": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            },
+            "buffer_seconds": { "type": "number", "minimum": 0 },
+            "policy_version": { "type": "string", "minLength": 1 },
+            "reason_codes": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "facts": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "sources": { "type": "array", "items": { "$ref": "./source.schema.json" } },
+    "weather": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "./weather-snapshot.schema.json" }
+      ]
+    },
+    "traffic": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "./traffic-snapshot.schema.json" }
+      ]
+    }
+  }
+}

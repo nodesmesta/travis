@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/alert.schema.json",
+  "title": "Alert",
+  "description": "In-app alert created by the background worker from validated provider facts or from the journey leg itself. factual_summary states what was observed. recommendation_summary states what the user may do and is never mixed into the facts.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "alert_type",
+    "severity",
+    "title",
+    "factual_summary",
+    "recommendation_summary",
+    "sources",
+    "retrieved_at",
+    "expires_at",
+    "triggered_at",
+    "status",
+    "freshness",
+    "policy_version",
+    "reason_codes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "agenda_item_id": { "type": ["string", "null"], "format": "uuid" },
+    "journey_leg_id": { "type": ["string", "null"], "format": "uuid" },
+    "alert_type": {
+      "enum": ["departure_reminder", "traffic_risk", "weather_risk"]
+    },
+    "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "factual_summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "recommendation_summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "sources": {
+      "type": "array",
+      "description": "Evidence behind the alert. Every entry carries its own retrieval time.",
+      "items": { "$ref": "source.schema.json" }
+    },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "triggered_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "enum": ["unread", "read", "dismissed"],
+      "description": "Stored user state. Expiry is reported separately in freshness."
+    },
+    "freshness": {
+      "enum": ["fresh", "expired"],
+      "description": "Computed on every read from expires_at. Expired alerts are omitted unless include_expired=true."
+    },
+    "read_at": { "type": ["string", "null"], "format": "date-time" },
+    "dismissed_at": { "type": ["string", "null"], "format": "date-time" },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "reason_codes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "job_id": { "type": ["string", "null"], "format": "uuid" }
+  }
+}

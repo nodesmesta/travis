@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/confirmation-request.schema.json",
+  "title": "Confirmation Request",
+  "description": "Issued by the backend before a mutation. The token is bound to the user, trip, action, entity, and a hash of what the user was shown. It is returned once; only its SHA-256 hash is stored.",
+  "type": "object",
+  "required": ["action", "entity_type", "entity_id", "summary", "expires_at"],
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "save_event_result",
+        "expire_event_result",
+        "save_recommendation",
+        "apply_recommendation",
+        "dismiss_recommendation"
+      ]
+    },
+    "entity_type": { "enum": ["event_discovery_result", "recommendation"] },
+    "entity_id": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "confirmation_token": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 200,
+      "description": "Single-use token. Absent when a stored response is replayed, because the raw token is never stored."
+    }
+  }
+}

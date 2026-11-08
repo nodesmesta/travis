@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/context-point.schema.json",
+  "title": "Context Point",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "type",
+    "label",
+    "status",
+    "resolution_status",
+    "confirmation_status",
+    "source",
+    "timezone"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "type": {
+      "enum": [
+        "airport",
+        "station",
+        "hotel",
+        "meeting",
+        "conference",
+        "event",
+        "restaurant",
+        "attraction",
+        "custom_location"
+      ]
+    },
+    "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "address": { "type": ["string", "null"], "maxLength": 500 },
+    "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+    "longitude": {
+      "type": ["number", "null"],
+      "minimum": -180,
+      "maximum": 180
+    },
+    "timezone": { "type": "string", "minLength": 1 },
+    "external_place_id": { "type": ["string", "null"], "minLength": 1 },
+    "status": { "enum": ["active", "archived"] },
+    "resolution_status": { "enum": ["resolved", "ambiguous", "unresolved"] },
+    "confirmation_status": { "enum": ["unconfirmed", "confirmed"] },
+    "source": {
+      "enum": [
+        "user_input",
+        "booking_import",
+        "assistant_suggestion",
+        "brightdata",
+        "external_provider"
+      ]
+    },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "request_id": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "resolution_status": { "const": "resolved" } } },
+      "then": { "required": ["latitude", "longitude", "external_place_id"] }
+    }
+  ]
+}

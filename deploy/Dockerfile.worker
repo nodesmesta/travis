@@ -1,0 +1,70 @@
+# syntax=docker/dockerfile:1
+#
+# TravelFlow worker image. Build from the repository root:
+#   docker build -f deploy/Dockerfile.worker -t travelflow/worker .
+#
+# The worker imports `@travelflow/api/shared` (apps/api/dist/worker-shared.js),
+# so the API workspace is built and shipped too. Build order:
+#   contracts -> domain -> integrations -> api -> worker
+# No secret is read at build time.
+
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/domain/package.json packages/domain/
+COPY packages/integrations/package.json packages/integrations/
+RUN npm ci --ignore-scripts
+
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps/api apps/api
+COPY apps/worker apps/worker
+RUN npm run build -w @travelflow/contracts \
+    && npm run build -w @travelflow/domain \
+    && npm run build -w @travelflow/integrations \
+    && npm run build -w @travelflow/api \
+    && npm run build -w @travelflow/worker
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/domain/package.json packages/domain/
+COPY packages/integrations/package.json packages/integrations/
+RUN npm ci --omit=dev --ignore-scripts -w @travelflow/worker \
+    && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=build /app/packages/domain/package.json ./packages/domain/package.json
+COPY --from=build /app/packages/domain/dist ./packages/domain/dist
+COPY --from=build /app/packages/integrations/package.json ./packages/integrations/package.json
+COPY --from=build /app/packages/integrations/dist ./packages/integrations/dist
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/worker/package.json ./apps/worker/package.json
+COPY --from=build /app/apps/worker/dist ./apps/worker/dist
+COPY deploy/preflight.mjs ./deploy/
+
+USER node
+
+# The worker has no HTTP port, so there is no HEALTHCHECK. Liveness is the
+# process itself (restart policy in Compose) and the `worker.started` /
+# `worker.*` log events.
+CMD ["node", "--enable-source-maps", "deploy/preflight.mjs", "worker"]

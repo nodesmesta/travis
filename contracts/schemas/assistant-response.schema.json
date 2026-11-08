@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/assistant-response.schema.json",
+  "title": "Assistant Response",
+  "description": "Structured assistant answer. The frontend renders it without parsing free text. Cards, sources, and confirmation requests are produced by the backend; the model only writes message text, recommendation wording, and limitations.",
+  "type": "object",
+  "required": [
+    "message",
+    "intent",
+    "context",
+    "cards",
+    "facts",
+    "recommendations",
+    "clarification",
+    "confirmation_request",
+    "sources",
+    "limitations",
+    "follow_up_actions",
+    "freshness_status",
+    "retrieved_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "intent": {
+      "enum": [
+        "find_nearby_event",
+        "find_nearby_activity",
+        "check_weather",
+        "check_traffic",
+        "compare_transport",
+        "find_restaurant",
+        "suggest_alternative",
+        "save_to_itinerary",
+        "summarize_trip",
+        "get_recommendations",
+        "clarify_context",
+        "out_of_scope"
+      ]
+    },
+    "context": {
+      "type": "object",
+      "required": ["context_point_ids", "agenda_item_ids", "event_result_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "context_point_ids": { "type": "array", "items": { "type": "string" } },
+        "agenda_item_ids": { "type": "array", "items": { "type": "string" } },
+        "event_result_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "id", "title", "fields", "source_ids"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "enum": [
+              "event",
+              "activity",
+              "restaurant",
+              "route",
+              "weather",
+              "traffic",
+              "alert",
+              "agenda",
+              "recommendation"
+            ]
+          },
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "subtitle": { "type": "string", "maxLength": 300 },
+          "status": { "type": "string", "maxLength": 60 },
+          "starts_at": { "type": "string", "format": "date-time" },
+          "ends_at": { "type": "string", "format": "date-time" },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label", "value"],
+              "additionalProperties": false,
+              "properties": {
+                "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+                "value": { "type": "string", "maxLength": 1000 }
+              }
+            }
+          },
+          "source_ids": { "type": "array", "items": { "type": "string" } },
+          "retrieved_at": { "type": "string", "format": "date-time" },
+          "recommended": {
+            "type": "boolean",
+            "description": "True on the option the deterministic engine recommends. Set by the backend, never by the model."
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Position given by the deterministic engine. 1 is best."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["action", "label"],
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "enum": [
+                    "save_event_result",
+                    "expire_event_result",
+                    "save_recommendation",
+                    "apply_recommendation",
+                    "dismiss_recommendation"
+                  ]
+                },
+                "label": { "type": "string", "minLength": 1, "maxLength": 80 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "value", "source_ids"],
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "value": { "type": "string", "maxLength": 1000 },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "reason", "confidence", "source_ids"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "confidence": { "enum": ["low", "medium", "high"] },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "clarification": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["question", "options"],
+          "additionalProperties": false,
+          "properties": {
+            "question": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "label"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "confirmation_request": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "./confirmation-request.schema.json" }
+      ]
+    },
+    "sources": { "type": "array", "items": { "$ref": "./source.schema.json" } },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 500 }
+    },
+    "follow_up_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "prompt"],
+        "additionalProperties": false,
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "prompt": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "freshness_status": {
+      "enum": ["fresh", "stale", "expired", "unavailable"]
+    },
+    "retrieved_at": {
+      "oneOf": [{ "type": "null" }, { "type": "string", "format": "date-time" }]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment and secrets (templates stay tracked)
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.pem
+*.key
+*.dump
+
+# Logs and OS files
+*.log
+.DS_Store
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# Planning and documentation kept out of the public repository.
+# plan/ names internal infrastructure (servers, SSH keys, network details).
+# docs/validation/ holds unreviewed screenshots of running sessions.
+plan/
+docs/
+
+# Scratch debug script
+scripts/zz-trace.mjs

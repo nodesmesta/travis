@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/route-option.schema.json",
+  "title": "Route Option",
+  "description": "One comparable route. provider_facts are values a provider returned. derived_metrics, risk, and score are computed by the backend under policy_version. No field is written by an LLM.",
+  "type": "object",
+  "required": [
+    "id",
+    "route_request_id",
+    "provider",
+    "provider_route_id",
+    "transport_mode",
+    "provider_facts",
+    "derived_metrics",
+    "cost",
+    "risk",
+    "score",
+    "status",
+    "exclusion_reasons",
+    "recommended",
+    "selected",
+    "policy_version",
+    "source_ids",
+    "retrieved_at",
+    "expires_at",
+    "freshness"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "route_request_id": { "type": "string", "format": "uuid" },
+    "provider": { "enum": ["here_routing_v8", "here_intermodal_v8"] },
+    "provider_route_id": { "type": "string", "minLength": 1 },
+    "transport_mode": { "enum": ["car", "taxi", "pedestrian", "transit"] },
+    "provider_facts": {
+      "type": "object",
+      "required": [
+        "distance_meters",
+        "duration_seconds",
+        "base_duration_seconds",
+        "typical_duration_seconds",
+        "departure_at",
+        "arrival_at",
+        "sections",
+        "notices"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "distance_meters": { "type": ["number", "null"], "minimum": 0 },
+        "duration_seconds": { "type": "number", "minimum": 0 },
+        "base_duration_seconds": { "type": ["number", "null"], "minimum": 0 },
+        "typical_duration_seconds": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "departure_at": { "type": "string", "format": "date-time" },
+        "arrival_at": { "type": "string", "format": "date-time" },
+        "sections": { "type": "array", "items": { "$ref": "#/$defs/section" } },
+        "notices": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "derived_metrics": {
+      "type": "object",
+      "required": [
+        "departure_at",
+        "arrival_at",
+        "total_duration_seconds",
+        "traffic_delay_seconds",
+        "traffic_delay_ratio",
+        "walking_minutes",
+        "transfer_count",
+        "safety_buffer_seconds",
+        "deadline_slack_seconds",
+        "feasible",
+        "latest_departure_at",
+        "reason_codes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "departure_at": { "type": "string", "format": "date-time" },
+        "arrival_at": { "type": "string", "format": "date-time" },
+        "total_duration_seconds": { "type": "number", "minimum": 0 },
+        "traffic_delay_seconds": { "type": ["number", "null"], "minimum": 0 },
+        "traffic_delay_ratio": { "type": ["number", "null"], "minimum": 0 },
+        "walking_minutes": { "type": "number", "minimum": 0 },
+        "transfer_count": { "type": "integer", "minimum": 0 },
+        "safety_buffer_seconds": { "type": "number", "minimum": 0 },
+        "deadline_slack_seconds": { "type": ["number", "null"] },
+        "feasible": { "type": ["boolean", "null"] },
+        "latest_departure_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reasonCode" }
+        }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "required": [
+        "min_amount",
+        "max_amount",
+        "currency",
+        "source_type",
+        "is_estimate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "min_amount": { "type": ["number", "null"], "minimum": 0 },
+        "max_amount": { "type": ["number", "null"], "minimum": 0 },
+        "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+        "source_type": {
+          "enum": ["provider", "user_input", "calculated", "unavailable"]
+        },
+        "is_estimate": { "type": "boolean" }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["traffic", "weather", "overall"],
+      "additionalProperties": false,
+      "properties": {
+        "traffic": { "$ref": "#/$defs/riskLevel" },
+        "weather": { "$ref": "#/$defs/riskLevel" },
+        "overall": { "$ref": "#/$defs/riskLevel" }
+      }
+    },
+    "score": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["total", "components", "weights", "rank"],
+          "additionalProperties": false,
+          "properties": {
+            "total": { "type": "number" },
+            "components": {
+              "type": "object",
+              "additionalProperties": { "type": ["number", "null"] }
+            },
+            "weights": {
+              "type": "object",
+              "additionalProperties": { "type": "number" }
+            },
+            "rank": { "type": ["integer", "null"], "minimum": 1 }
+          }
+        }
+      ]
+    },
+    "status": { "enum": ["valid", "excluded", "expired", "invalid"] },
+    "exclusion_reasons": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reasonCode" }
+    },
+    "recommended": { "type": "boolean" },
+    "selected": { "type": "boolean" },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "source_ids": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired"] }
+  },
+  "$defs": {
+    "riskLevel": { "enum": ["low", "medium", "high", "unknown"] },
+    "reasonCode": {
+      "enum": [
+        "arrival_deadline",
+        "traffic_delay",
+        "traffic_incident",
+        "weather_risk",
+        "walking_limit",
+        "transfer_limit",
+        "cost_limit",
+        "shorter_duration",
+        "more_buffer",
+        "public_transit_preference",
+        "comfort_preference",
+        "route_unavailable",
+        "weather_unavailable",
+        "traffic_unavailable"
+      ]
+    },
+    "place": {
+      "type": "object",
+      "required": ["name", "latitude", "longitude", "provider_place_id"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "provider_place_id": { "type": ["string", "null"] }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": [
+        "type",
+        "mode",
+        "service_name",
+        "operator",
+        "operator_id",
+        "headsign",
+        "departure_at",
+        "arrival_at",
+        "duration_seconds",
+        "distance_meters",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "mode": { "type": ["string", "null"] },
+        "service_name": { "type": ["string", "null"] },
+        "operator": { "type": ["string", "null"] },
+        "operator_id": { "type": ["string", "null"] },
+        "headsign": { "type": ["string", "null"] },
+        "departure_at": { "type": "string", "format": "date-time" },
+        "arrival_at": { "type": "string", "format": "date-time" },
+        "duration_seconds": { "type": "number", "minimum": 0 },
+        "distance_meters": { "type": ["number", "null"], "minimum": 0 },
+        "from": { "$ref": "#/$defs/place" },
+        "to": { "$ref": "#/$defs/place" }
+      }
+    }
+  }
+}

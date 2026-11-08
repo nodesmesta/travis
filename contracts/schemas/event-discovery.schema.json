@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/event-discovery.schema.json",
+  "title": "Event Discovery Response",
+  "type": "object",
+  "required": [
+    "request_id",
+    "trip_id",
+    "context_point_id",
+    "items",
+    "sources",
+    "retrieved_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "context_point_id": { "type": "string", "minLength": 1 },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "./event-item.schema.json" }
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "./source.schema.json" }
+    },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired", "unavailable"] },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}

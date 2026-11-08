@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/background-job.schema.json",
+  "title": "Background Job",
+  "description": "Audit view of one job execution. A job never retries by itself. A manual rerun creates a new job whose parent_job_id points at the job it repeats. Payload, lease owner, and raw errors are not exposed.",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "job_type",
+    "status",
+    "run_at",
+    "attempts",
+    "correlation_id",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "parent_job_id": { "type": ["string", "null"], "format": "uuid" },
+    "job_type": {
+      "enum": [
+        "refresh_weather",
+        "refresh_traffic",
+        "evaluate_alerts",
+        "departure_reminder"
+      ]
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "interrupted",
+        "cancelled"
+      ]
+    },
+    "run_at": { "type": "string", "format": "date-time" },
+    "attempts": { "type": "integer", "minimum": 0 },
+    "correlation_id": { "type": "string", "minLength": 1 },
+    "execution_id": { "type": ["string", "null"], "format": "uuid" },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "result_summary": {
+      "type": ["object", "null"],
+      "description": "Outcome recorded by the worker, for example alert_created, no_action, or snapshot_refreshed, with reason codes and entity ids.",
+      "additionalProperties": true
+    },
+    "error_code": { "type": ["string", "null"] },
+    "error_message": {
+      "type": ["string", "null"],
+      "description": "Safe message. Never a stack trace or provider body."
+    },
+    "can_rerun": {
+      "type": "boolean",
+      "description": "True when the job ended failed or interrupted and no rerun of it is active."
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

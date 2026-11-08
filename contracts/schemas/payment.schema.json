@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/payment.schema.json",
+  "title": "Payment",
+  "type": "object",
+  "required": [
+    "id",
+    "booking_id",
+    "payment_reference",
+    "provider",
+    "mode",
+    "amount",
+    "currency",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "booking_id": { "type": "string", "minLength": 1 },
+    "payment_reference": { "type": "string", "minLength": 1 },
+    "provider": { "const": "dummy_payment" },
+    "mode": { "const": "simulated" },
+    "amount": { "type": "number", "minimum": 0 },
+    "currency": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 3,
+      "description": "Three uppercase ASCII letters, for example IDR."
+    },
+    "status": {
+      "enum": ["pending", "succeeded", "failed", "cancelled", "refunded"]
+    },
+    "paid_at": { "type": "string", "format": "date-time" },
+    "failed_at": { "type": "string", "format": "date-time" },
+    "failure_code": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

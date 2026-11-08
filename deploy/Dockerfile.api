@@ -1,0 +1,74 @@
+# syntax=docker/dockerfile:1
+#
+# TravelFlow API image. Build from the repository root:
+#   docker build -f deploy/Dockerfile.api -t travelflow/api .
+#
+# Stages: build (devDependencies + tsc) -> prod-deps (omit dev) -> runtime.
+# Workspace build order matches the root "build" script:
+#   contracts -> domain -> integrations -> api
+# No secret is read at build time. All configuration arrives at run time.
+
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+
+# Manifests first so `npm ci` stays cached until a dependency changes.
+# All workspace manifests are needed so npm can check the lockfile.
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/domain/package.json packages/domain/
+COPY packages/integrations/package.json packages/integrations/
+RUN npm ci --ignore-scripts
+
+COPY tsconfig.base.json ./
+COPY packages packages
+COPY apps/api apps/api
+RUN npm run build -w @travelflow/contracts \
+    && npm run build -w @travelflow/domain \
+    && npm run build -w @travelflow/integrations \
+    && npm run build -w @travelflow/api
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/domain/package.json packages/domain/
+COPY packages/integrations/package.json packages/integrations/
+RUN npm ci --omit=dev --ignore-scripts -w @travelflow/api \
+    && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+ENV NODE_ENV=production \
+    API_HOST=0.0.0.0 \
+    API_PORT=4000
+WORKDIR /app
+
+# node_modules holds symlinks to the workspace packages, so the packages must
+# sit at the same relative paths (packages/*, apps/api).
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=build /app/packages/domain/package.json ./packages/domain/package.json
+COPY --from=build /app/packages/domain/dist ./packages/domain/dist
+COPY --from=build /app/packages/integrations/package.json ./packages/integrations/package.json
+COPY --from=build /app/packages/integrations/dist ./packages/integrations/dist
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY deploy/preflight.mjs deploy/healthcheck.mjs ./deploy/
+
+USER node
+EXPOSE 4000
+
+HEALTHCHECK --interval=15s --timeout=6s --start-period=20s --retries=3 \
+    CMD ["node", "deploy/healthcheck.mjs", "http://127.0.0.1:4000/health"]
+
+# preflight exits 1 with a structured error when configuration is missing or unsafe.
+CMD ["node", "--enable-source-maps", "deploy/preflight.mjs", "api"]

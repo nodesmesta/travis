@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/place-discovery.schema.json",
+  "title": "Place Discovery Response",
+  "type": "object",
+  "required": [
+    "request_id",
+    "trip_id",
+    "context_point_id",
+    "category",
+    "status",
+    "items",
+    "sources",
+    "retrieved_at",
+    "expires_at",
+    "freshness",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "format": "uuid" },
+    "context_point_id": { "type": "string", "format": "uuid" },
+    "category": { "enum": ["activity", "restaurant"] },
+    "status": { "enum": ["ok", "empty"] },
+    "cache_status": { "enum": ["hit", "miss"] },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "./place-item.schema.json" }
+    },
+    "sources": { "type": "array", "items": { "$ref": "./source.schema.json" } },
+    "retrieved_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "freshness": { "enum": ["fresh", "expired", "unavailable"] },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/trip.schema.json",
+  "title": "Trip",
+  "type": "object",
+  "required": [
+    "id",
+    "user_id",
+    "name",
+    "timezone",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "user_id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "destination_summary": { "type": ["string", "null"], "maxLength": 500 },
+    "start_at": { "type": ["string", "null"], "format": "date-time" },
+    "end_at": { "type": ["string", "null"], "format": "date-time" },
+    "timezone": {
+      "type": "string",
+      "minLength": 1,
+      "description": "IANA timezone identifier, for example Asia/Jakarta. Validated by the API."
+    },
+    "status": { "enum": ["draft", "confirmed", "active", "completed"] },
+    "source": { "enum": ["user_input", "imported_booking", "internal"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "request_id": { "type": "string" }
+  }
+}

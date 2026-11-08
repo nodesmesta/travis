@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://travelflow.local/contracts/journey-leg.schema.json",
+  "title": "Journey Leg",
+  "type": "object",
+  "required": [
+    "id",
+    "trip_id",
+    "origin_context_point_id",
+    "destination_context_point_id",
+    "departure_at",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "origin_context_point_id": { "type": "string", "minLength": 1 },
+    "destination_context_point_id": { "type": "string", "minLength": 1 },
+    "related_agenda_id": { "type": ["string", "null"] },
+    "departure_at": { "type": "string", "format": "date-time" },
+    "arrival_deadline": { "type": ["string", "null"], "format": "date-time" },
+    "status": { "enum": ["planned", "in_progress", "completed", "cancelled"] }
+  }
+}
