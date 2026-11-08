@@ -37,6 +37,11 @@ export interface AssistantResponse {
     confidence: "low" | "medium" | "high";
     source_ids: string[];
   }>;
+  travel_tips: Array<{
+    title: string;
+    detail: string;
+    source_ids: string[];
+  }>;
   clarification: {
     question: string;
     options: Array<{ id: string; label: string }>;
@@ -52,6 +57,7 @@ export interface AssistantResponse {
 export interface SynthesisOutput {
   message: string;
   recommendations: AssistantResponse["recommendations"];
+  travel_tips: AssistantResponse["travel_tips"];
   limitations: string[];
   follow_up_actions: AssistantResponse["follow_up_actions"];
   recommended_option_id: string | null;
@@ -150,6 +156,23 @@ export function validateSynthesisOutput(
       }
     }
   }
+  for (const tip of output.travel_tips) {
+    if (tip.source_ids.length === 0) {
+      throw new AssistantError(
+        "SYNTHESIS_SOURCE_MISSING",
+        "A travel tip has no source.",
+      );
+    }
+    for (const id of tip.source_ids) {
+      if (!knownSources.has(id)) {
+        throw new AssistantError(
+          "SYNTHESIS_SOURCE_MISSING",
+          "A travel tip cites a source that was not retrieved.",
+          { source_id: id.slice(0, 80) },
+        );
+      }
+    }
+  }
 
   const locked = input.results
     .map((result) => result.locked?.recommendedOptionId)
@@ -183,6 +206,7 @@ export function validateSynthesisOutput(
   const texts = [
     output.message,
     ...output.recommendations.flatMap((entry) => [entry.title, entry.reason]),
+    ...output.travel_tips.flatMap((entry) => [entry.title, entry.detail]),
     ...output.limitations,
     ...output.follow_up_actions.flatMap((entry) => [entry.label, entry.prompt]),
   ];
@@ -311,6 +335,7 @@ export function composeAssistantResponse(
     ).slice(0, input.maxCards),
     facts: input.results.flatMap((result) => result.facts).slice(0, 20),
     recommendations: input.synthesis.recommendations,
+    travel_tips: input.synthesis.travel_tips,
     clarification: null,
     confirmation_request: input.confirmation,
     sources: dedupe(
@@ -347,6 +372,7 @@ export function composeClarificationResponse(input: {
     cards: [],
     facts: [],
     recommendations: [],
+    travel_tips: [],
     clarification: { question: input.question, options: input.options },
     confirmation_request: null,
     sources: [],
@@ -410,6 +436,7 @@ export const ASSISTANT_RESPONSE_SCHEMA: JsonSchema = {
     "cards",
     "facts",
     "recommendations",
+    "travel_tips",
     "clarification",
     "confirmation_request",
     "sources",
@@ -433,6 +460,7 @@ export const ASSISTANT_RESPONSE_SCHEMA: JsonSchema = {
         "save_to_itinerary",
         "summarize_trip",
         "get_recommendations",
+        "get_trip_advice",
         "clarify_context",
         "out_of_scope",
       ],
@@ -527,6 +555,19 @@ export const ASSISTANT_RESPONSE_SCHEMA: JsonSchema = {
           title: { type: "string", minLength: 1, maxLength: 200 },
           reason: { type: "string", minLength: 1, maxLength: 1000 },
           confidence: { enum: ["low", "medium", "high"] },
+          source_ids: idArray,
+        },
+      },
+    },
+    travel_tips: {
+      type: "array",
+      items: {
+        type: "object",
+        required: ["title", "detail", "source_ids"],
+        additionalProperties: false,
+        properties: {
+          title: { type: "string", minLength: 1, maxLength: 200 },
+          detail: { type: "string", minLength: 1, maxLength: 1000 },
           source_ids: idArray,
         },
       },
@@ -627,6 +668,7 @@ export function validateAssistantResponse(
     ...typed.cards.flatMap((card) => card.source_ids),
     ...typed.facts.flatMap((fact) => fact.source_ids),
     ...typed.recommendations.flatMap((entry) => entry.source_ids),
+    ...typed.travel_tips.flatMap((entry) => entry.source_ids),
   ];
   for (const id of cited) {
     if (!sourceIds.has(id)) {

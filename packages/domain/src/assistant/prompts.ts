@@ -50,6 +50,15 @@ export interface TripSnapshot {
     departure_at: string;
     status: string;
   }>;
+  /** The bookings that make up this trip. Read-only context for advice. */
+  bookings?: Array<{
+    id: string;
+    type: string;
+    status: string;
+    total: number;
+    currency: string;
+    starts_at: string | null;
+  }>;
 }
 
 const PLANNER_RULES = `You are the planning step of Travis, an assistant for business travelers.
@@ -60,7 +69,8 @@ Rules:
 - Use only tools from the tool catalog, with arguments that match their input schema. Never invent tool names, ids, URLs, or fields.
 - Context point ids must come from the trip snapshot. Use the resolved context when it is given.
 - For a route or traffic question, set the origin and destination only from the resolved context (origin_context_point_id and destination_context_point_id). If the resolved context does not give both, still choose the tool and the two places you think are meant; the backend will ask the user to confirm. Use journey_leg_id only when the user refers to one of the stored journey legs in the trip data; never combine it with an origin or destination. The departure date and time are optional; leave them out unless the user gave them.
-- Tool choice: compare_routes for how to get from one place to another; get_traffic for traffic along a corridor; get_weather for weather at one place; find_nearby_activities and find_nearby_restaurants for things to do or eat near one place; discover_events for events on a date; get_trip_summary for the user's own plans; get_recommendations for stored recommendations.
+- Tool choice: compare_routes for how to get from one place to another; get_traffic for traffic along a corridor; get_weather for weather at one place; get_trip_advice for what to know or plan for a day of this trip (combines the day's agenda, weather, and the route between its places); find_nearby_activities and find_nearby_restaurants for things to do or eat near one place; discover_events for events on a date; get_trip_summary for the user's own plans; get_recommendations for stored recommendations.
+- When the user asks for travel tips or local suggestions for a day, use get_trip_advice. If they also ask what to do or see nearby, add find_nearby_activities so the answer combines live web findings with the trip's own weather and routes.
 - Dates are in the trip timezone. Resolve words such as "tonight" or "tomorrow" into calendar dates from the current date given below. Use YYYY-MM-DD for dates and HH:MM for times.
 - You never change data. To save, add, apply, dismiss, or expire something, use intent save_to_itinerary with no tool calls and set proposed_action to an action and an entity id taken from the allowed entity list.
 - If the request is not about this trip or the supported tools, use intent out_of_scope with no tool calls.
@@ -75,6 +85,7 @@ Rules:
 - If the result is empty or has limitations, say so plainly in the message. The interface already shows the limitations listed in the tool results, so do not repeat or translate them in the limitations field. Return an empty limitations list unless you have a new limitation of your own.
 - Every recommendation must list source_ids copied from the data. Do not recommend anything you cannot support with a source.
 - Suggestions are not confirmed plans. Never say that something was saved, added, booked, or changed.
+- Travel tips are practical advice derived from the tool results, for example leaving earlier when the route risk or rain chance is high, or choosing the indoor option when rain is likely. Each tip must cite the source ids of the results it is based on. Never present a tip as a provider fact: phrase it as advice, and never add a number that is not in the data. Return an empty list when the answer gives no practical advice.
 - recommended_option_id: copy locked.recommended_option_id exactly when it is present, otherwise return null. ranked_option_ids: copy locked.ranked_option_ids exactly, in the same order, when it is present, otherwise return an empty list. Never change ranking or numbers computed by the backend.
 - For routes, weather, traffic, and places, the interface shows the figures in cards. In the message, give the answer first: name the recommended option and its main figures exactly as they appear in the data, in the units used there (minutes, kilometres, degrees Celsius, percent). Do not convert, round differently, or average them, and do not call another option best than the recommended one.
 - If a tool result lists limitations (for example that a figure is a straight-line distance or that the departure time was not given), keep that meaning in the answer; never present an unavailable figure as known.
@@ -152,6 +163,7 @@ export const SYNTHESIS_SCHEMA: JsonSchema = {
   required: [
     "message",
     "recommendations",
+    "travel_tips",
     "limitations",
     "follow_up_actions",
     "recommended_option_id",
@@ -181,6 +193,24 @@ export const SYNTHESIS_SCHEMA: JsonSchema = {
       type: "array",
       maxItems: 4,
       items: { type: "string", minLength: 1, maxLength: 300 },
+    },
+    travel_tips: {
+      type: "array",
+      maxItems: 4,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "detail", "source_ids"],
+        properties: {
+          title: { type: "string", minLength: 1, maxLength: 120 },
+          detail: { type: "string", minLength: 1, maxLength: 500 },
+          source_ids: {
+            type: "array",
+            minItems: 1,
+            items: { type: "string", minLength: 1 },
+          },
+        },
+      },
     },
     follow_up_actions: {
       type: "array",

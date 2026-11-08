@@ -307,15 +307,17 @@ export class ChatWithAssistantService {
     );
     if (existing) return this.replay(existing, input.requestId);
 
-    const [contextPoints, agenda, journeyLegs, recent] = await Promise.all([
-      this.deps.trips.listContextPointsForTrip(input.tripId, input.userId),
-      this.deps.trips.listAgendaItemsForTrip(input.tripId, input.userId),
-      this.deps.trips.listJourneyLegsForTrip(input.tripId, input.userId),
-      this.deps.conversations.recentMessages(
-        conversationId,
-        this.deps.maxContextMessages,
-      ),
-    ]);
+    const [contextPoints, agenda, journeyLegs, bookings, recent] =
+      await Promise.all([
+        this.deps.trips.listContextPointsForTrip(input.tripId, input.userId),
+        this.deps.trips.listAgendaItemsForTrip(input.tripId, input.userId),
+        this.deps.trips.listJourneyLegsForTrip(input.tripId, input.userId),
+        this.deps.toolServices.listBookings(input.tripId),
+        this.deps.conversations.recentMessages(
+          conversationId,
+          this.deps.maxContextMessages,
+        ),
+      ]);
     const snapshot: TripSnapshotData = {
       trip: {
         id: trip.id,
@@ -327,6 +329,7 @@ export class ChatWithAssistantService {
       contextPoints: contextPoints.map(toContextPointRecord),
       agenda: agenda.map(toAgendaRecord),
       journeyLegs: journeyLegs.map(toJourneyLegRecord),
+      bookings,
     };
     const history: HistoryMessage[] = recent
       .filter((row) => row.status !== "failed")

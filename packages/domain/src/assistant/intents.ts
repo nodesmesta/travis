@@ -10,6 +10,7 @@ export const ASSISTANT_INTENTS = [
   "save_to_itinerary",
   "summarize_trip",
   "get_recommendations",
+  "get_trip_advice",
   "clarify_context",
   "out_of_scope",
 ] as const;

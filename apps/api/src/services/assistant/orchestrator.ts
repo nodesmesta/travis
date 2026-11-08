@@ -143,6 +143,14 @@ function tripSnapshotForPrompt(
       departure_at: new Date(leg.departureAt).toISOString(),
       status: leg.status,
     })),
+    bookings: data.bookings.slice(0, 8).map((booking) => ({
+      id: booking.id,
+      type: booking.booking_type,
+      status: booking.status,
+      total: booking.total,
+      currency: booking.currency,
+      starts_at: booking.starts_at,
+    })),
   };
 }
 
@@ -526,6 +534,7 @@ export class AssistantOrchestrator {
       cards: [],
       facts: [],
       recommendations: [],
+      travel_tips: [],
       clarification: null,
       confirmation_request: null,
       sources: [],

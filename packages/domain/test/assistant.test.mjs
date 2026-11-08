@@ -624,6 +624,7 @@ const synthesis = (overrides = {}) => ({
       source_ids: ["s1"],
     },
   ],
+  travel_tips: [],
   limitations: [],
   follow_up_actions: [],
   recommended_option_id: null,

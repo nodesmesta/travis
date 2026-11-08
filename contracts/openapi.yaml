@@ -1189,11 +1189,13 @@ paths:
         conversation_id and execution_id) and never an invented answer.
 
         Tools the planner may use (read-only): discover_events, get_trip_summary,
-        get_recommendations, compare_routes, get_weather, get_traffic,
-        find_nearby_activities, find_nearby_restaurants. Route, weather, traffic,
-        and place figures in `cards` come from the providers and the mobility
-        engine unchanged; `cards[].recommended` and `cards[].rank` are set by the
-        engine, never by the model. A route or traffic question needs a start and
+        get_trip_advice, get_recommendations, compare_routes, get_weather,
+        get_traffic, find_nearby_activities, find_nearby_restaurants. Route,
+        weather, traffic, and place figures in `cards` come from the providers
+        and the mobility engine unchanged; `cards[].recommended` and
+        `cards[].rank` are set by the engine, never by the model. `travel_tips`
+        are advice derived by the synthesis step from those results and must
+        cite the source ids they rely on. A route or traffic question needs a start and
         an end that the message named (or a stored journey leg); otherwise the
         turn is a clarification. A provider whose key is not configured on the
         server (HERE, OpenWeather) fails the turn with EXTERNAL_CONFIGURATION_MISSING
