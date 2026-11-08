@@ -303,7 +303,7 @@ export default function HotelsView({
           Search stays
         </h2>
         <form className="search-bar stays" onSubmit={submit} noValidate>
-          <SearchField className="grow" error={errors.city} label="Where">
+          <SearchField className="grow" error={errors.city} icon="⌖" label="Where">
             <input
               autoComplete="off"
               list="hotel-city-options"
@@ -331,6 +331,7 @@ export default function HotelsView({
                 ? `${nights} ${nights === 1 ? "night" : "nights"}`
                 : undefined
             }
+            icon="▦"
             label="Check-in → Check-out"
           >
             <span className="date-range">
@@ -357,7 +358,7 @@ export default function HotelsView({
               />
             </span>
           </SearchField>
-          <SearchField error={errors.country} label="Country">
+          <SearchField error={errors.country} icon="⌂" label="Country">
             <select
               onChange={(event) => setCountryCode(event.target.value)}
               value={countryCode}
@@ -370,7 +371,7 @@ export default function HotelsView({
               ))}
             </select>
           </SearchField>
-          <SearchField label="Guests">
+          <SearchField icon="☺" label="Guests">
             <GuestStepper onChange={setAdults} value={adults} />
           </SearchField>
           <button
@@ -382,8 +383,17 @@ export default function HotelsView({
           </button>
         </form>
         <div className="search-foot">
-          <span>
-            Rates in {currency} · guest nationality {nationality}
+          <span className="search-chips">
+            <span>{city.trim() || "Anywhere"}</span>
+            {nights > 0 ? (
+              <span>
+                {nights} {nights === 1 ? "night" : "nights"}
+              </span>
+            ) : null}
+            <span>
+              {adults} {adults === 1 ? "adult" : "adults"}
+            </span>
+            <span>Rates in {currency}</span>
           </span>
           <details className="search-options">
             <summary>Rate settings</summary>

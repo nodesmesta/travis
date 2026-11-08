@@ -314,7 +314,7 @@ export default function FlightsView({
           Search flights
         </h2>
         <form className="search-bar flights" onSubmit={search} noValidate>
-          <SearchField className="grow" error={errors.origin} label="From">
+          <SearchField className="grow" error={errors.origin} icon="✈" label="From">
             <input
               autoComplete="off"
               maxLength={3}
@@ -331,7 +331,7 @@ export default function FlightsView({
           >
             ⇄
           </button>
-          <SearchField className="grow" error={errors.destination} label="To">
+          <SearchField className="grow" error={errors.destination} icon="✈" label="To">
             <input
               autoComplete="off"
               maxLength={3}
@@ -342,7 +342,7 @@ export default function FlightsView({
               value={destination}
             />
           </SearchField>
-          <SearchField error={errors.date} hint="One way" label="Departure">
+          <SearchField error={errors.date} hint="One way" icon="◷" label="Departure">
             <input
               min={dateFromToday(0)}
               onChange={(event) => setDate(event.target.value)}
@@ -350,7 +350,7 @@ export default function FlightsView({
               value={date}
             />
           </SearchField>
-          <SearchField label="Travellers">
+          <SearchField icon="☺" label="Travellers">
             <span className="stepper">
               <span className="stepper-value">1 adult</span>
             </span>
@@ -364,8 +364,14 @@ export default function FlightsView({
           </button>
         </form>
         <div className="search-foot">
-          <span>
-            One way · fares in {currency} · airport codes are three letters
+          <span className="search-chips">
+            <span>
+              {origin || "From"} → {destination || "To"}
+            </span>
+            {date ? <span>{date}</span> : null}
+            <span>1 adult</span>
+            <span>One way</span>
+            <span>Fares in {currency}</span>
           </span>
           <details className="search-options">
             <summary>Fare settings</summary>
