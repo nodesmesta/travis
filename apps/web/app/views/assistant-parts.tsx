@@ -55,7 +55,7 @@ export function AssistantCardView({
       <div className="asst-card-top">
         <span className="tag sage">{CARD_LABEL[card.type]}</span>
         {card.recommended ? (
-          <span className="tag gold">Recommended by TravelFlow</span>
+          <span className="tag gold">Recommended by travis</span>
         ) : null}
         {card.rank !== undefined ? (
           <span className="tag">Rank {card.rank}</span>

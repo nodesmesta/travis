@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "TravelFlow Assistant",
+  title: "travis",
   description: "Context-aware business travel operations assistant",
 };
 

@@ -250,7 +250,7 @@ function LoginScreen({
       <section className="auth-card" aria-labelledby="login-title">
         <div className="brand-lockup">
           <span className="brand-mark">✦</span>
-          <span>TravelFlow</span>
+          <span>travis</span>
         </div>
         <p className="eyebrow">BUSINESS TRAVEL OPERATIONS</p>
         <h1 id="login-title">Go further. Feel at home.</h1>
@@ -274,8 +274,8 @@ function LoginScreen({
           <PasswordLoginForm onSignedIn={onSignedIn} />
         ) : null}
         <p className="fine-print">
-          TravelFlow receives your name, email address and profile picture from
-          Google. It never asks for card details.
+          travis receives your name, email, and profile picture from Google. It
+          never asks for card details.
         </p>
       </section>
     </main>
@@ -285,28 +285,10 @@ function LoginScreen({
 const EXPLORE_MODES = ["nearby", "stays", "flights"] as const;
 type ExploreMode = (typeof EXPLORE_MODES)[number];
 
-const EXPLORE_HEADERS: Record<
-  ExploreMode,
-  { eyebrow: string; title: string; lede: string; badge: string }
-> = {
-  nearby: {
-    eyebrow: "EXPLORE · NEARBY",
-    title: "What is happening around your trip?",
-    lede: "Pick a place from the trip, then see events and activities you can book without leaving the workspace.",
-    badge: "◎",
-  },
-  stays: {
-    eyebrow: "EXPLORE · STAYS",
-    title: "Find a stay that fits the trip.",
-    lede: "Rates come from LiteAPI. Results are live snapshots and a prebook reserves the provider rate in the sandbox only.",
-    badge: "⌂",
-  },
-  flights: {
-    eyebrow: "EXPLORE · FLIGHTS",
-    title: "Compare flights for the trip.",
-    lede: "Searches use live LiteAPI sandbox inventory. Ticketing uses the provider sandbox card and never charges a real card.",
-    badge: "✈",
-  },
+const EXPLORE_TITLES: Record<ExploreMode, string> = {
+  nearby: "Nearby",
+  stays: "Stays",
+  flights: "Flights",
 };
 
 function parseWorkspaceHash(hash: string): {
@@ -906,31 +888,9 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark">✦</span>
-          <span>TravelFlow</span>
-        </div>
-        <div className="topbar-trip">
-          <span className="eyebrow">ACTIVE TRIP</span>
-          {trips.length > 0 ? (
-            <select
-              className="trp-select"
-              aria-label="Active trip"
-              value={trip?.id ?? ""}
-              onChange={(event) => void selectTrip(event.target.value)}
-            >
-              {trips.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <strong>{trip?.name ?? "No trip selected"}</strong>
-          )}
+          <span>travis</span>
         </div>
         <div className="topbar-actions">
-          <span className="user-label">
-            {trips.length} trip{trips.length === 1 ? "" : "s"}
-          </span>
           <button
             className="button ghost"
             onClick={() => void onSignOut()}
@@ -948,19 +908,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
         }
       >
         <aside className="sidebar">
-          <div className="trip-summary">
-            <p className="eyebrow">
-              {trip?.destination_summary ??
-                context?.label ??
-                "DESTINATION NOT SET"}
-            </p>
-            <h2>{trip?.name ?? "Travel workspace"}</h2>
-            <p>
-              {trip?.start_at
-                ? formatDate(trip.start_at, trip.timezone)
-                : "Dates to be confirmed"}
-            </p>
-          </div>
           <nav className="side-nav" aria-label="Workspace navigation">
             {VIEWS.map((item) => (
               <a
@@ -992,17 +939,8 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
         <section className="main-column" id="workspace">
           {view === "explore" ? (
             <>
-              <div className="welcome-row">
-                <div>
-                  <p className="eyebrow">
-                    {EXPLORE_HEADERS[exploreMode].eyebrow}
-                  </p>
-                  <h1>{EXPLORE_HEADERS[exploreMode].title}</h1>
-                  <p className="lede">{EXPLORE_HEADERS[exploreMode].lede}</p>
-                </div>
-                <span className="sun-badge">
-                  {EXPLORE_HEADERS[exploreMode].badge}
-                </span>
+              <div className="explore-heading">
+                <h1>{EXPLORE_TITLES[exploreMode]}</h1>
               </div>
               {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
               <ExploreTabs active={exploreMode} onChange={showExploreMode} />

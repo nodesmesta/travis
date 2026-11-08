@@ -73,18 +73,7 @@ export default function BookingsView({ trip, onOpenInvoices }: ViewProps) {
 
   return (
     <div className="view-stack bookings-view">
-      <div className="welcome-row">
-        <div>
-          <p className="eyebrow">TRIP RESERVATIONS</p>
-          <h1>Everything booked for this trip.</h1>
-          <p className="lede">
-            Events, activities, hotels, and flights stay together here. Provider
-            status, cancellation, and invoice actions remain attached to each
-            reservation.
-          </p>
-        </div>
-        <span className="sun-badge">▣</span>
-      </div>
+      <h1 className="view-title">Bookings</h1>
       {error ? <div className="status-banner error">{error}</div> : null}
       {loading ? (
         <p className="helper-text" role="status">
@@ -135,7 +124,7 @@ export default function BookingsView({ trip, onOpenInvoices }: ViewProps) {
                 <p>
                   {booking.provider_name === "liteapi"
                     ? "LiteAPI sandbox provider"
-                    : "TravelFlow internal reservation"}
+                    : "travis internal reservation"}
                   {booking.starts_at
                     ? ` · starts ${isoTime(booking.starts_at)}`
                     : ""}
