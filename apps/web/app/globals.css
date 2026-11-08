@@ -3965,7 +3965,7 @@ body {
 .asst-panel.rail .asst-log {
   flex: 1 1 auto;
   min-height: 220px;
-  max-height: 46vh;
+  max-height: none;
 }
 
 .asst-panel.rail .asst-context {
