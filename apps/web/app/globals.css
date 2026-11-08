@@ -27,7 +27,8 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 button,
-input {
+input,
+select {
   font: inherit;
 }
 button {
@@ -40,6 +41,7 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
+select:focus-visible,
 summary:focus-visible {
   outline: 3px solid rgba(249, 115, 115, 0.6);
   outline-offset: 3px;
@@ -115,7 +117,8 @@ label {
   font-size: 13px;
   font-weight: 700;
 }
-input {
+input,
+select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -123,7 +126,8 @@ input {
   color: var(--text);
   padding: 13px 14px;
 }
-input:focus {
+input:focus,
+select:focus {
   border-color: var(--indigo);
 }
 .fine-print {
@@ -418,7 +422,8 @@ input:focus {
 .discovery-form label {
   font-size: 11px;
 }
-.discovery-form input {
+.discovery-form input,
+.discovery-form select {
   padding: 11px 10px;
   font-size: 13px;
 }

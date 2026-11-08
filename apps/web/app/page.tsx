@@ -13,7 +13,6 @@ import TripsView from "./views/trips";
 import { VIEWS, type ViewId, type ViewProps } from "./views/types";
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -25,71 +24,8 @@ import {
   readAuthRedirectError,
   startGoogleSignIn,
 } from "../lib/auth";
-import {
-  ApiClientError,
-  createBooking,
-  discoverEvents,
-  getBookingQuote,
-  listContextPoints,
-  listTrips,
-  simulatePayment,
-} from "../lib/api";
-import type {
-  Booking,
-  BookingQuote,
-  ContextPoint,
-  EventDiscoveryResponse,
-  EventItem,
-  Payment,
-  Trip,
-} from "../lib/types";
-
-function formatMoney(currency: string, amount: number): string {
-  return `${currency} ${new Intl.NumberFormat("en-US").format(amount)}`;
-}
-
-function formatDate(value: string | null | undefined, timezone = "UTC") {
-  if (!value) return "Date to be confirmed";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: timezone,
-  }).format(new Date(value));
-}
-
-function datePart(value: string | null): string {
-  return value ? value.slice(0, 10) : "";
-}
-
-function timePart(value: string | null, timezone: string): string {
-  if (!value) return "";
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: timezone,
-  }).formatToParts(new Date(value));
-  const hour = parts.find((part) => part.type === "hour")?.value ?? "";
-  const minute = parts.find((part) => part.type === "minute")?.value ?? "";
-  return hour && minute ? `${hour}:${minute}` : "";
-}
-
-function timezoneTimestamp(
-  date: string,
-  time: string,
-  timezone: string,
-): string {
-  const probe = new Date(`${date}T${time}:00Z`);
-  const zone =
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      timeZoneName: "longOffset",
-    })
-      .formatToParts(probe)
-      .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
-  const offset = zone.replace("GMT", "") || "+00:00";
-  return `${date}T${time}:00${offset}`;
-}
+import { ApiClientError, listContextPoints, listTrips } from "../lib/api";
+import type { ContextPoint, Trip } from "../lib/types";
 
 function friendlyError(error: unknown): string {
   if (error instanceof ApiClientError) {
@@ -282,11 +218,10 @@ function LoginScreen({
   );
 }
 
-const EXPLORE_MODES = ["nearby", "stays", "flights"] as const;
+const EXPLORE_MODES = ["stays", "flights"] as const;
 type ExploreMode = (typeof EXPLORE_MODES)[number];
 
 const EXPLORE_TITLES: Record<ExploreMode, string> = {
-  nearby: "Nearby",
   stays: "Stays",
   flights: "Flights",
 };
@@ -332,13 +267,6 @@ function ExploreTabs({
   return (
     <nav className="explore-tabs" aria-label="Explore categories">
       <button
-        className={active === "nearby" ? "active" : undefined}
-        onClick={() => onChange("nearby")}
-        type="button"
-      >
-        Nearby
-      </button>
-      <button
         className={active === "stays" ? "active" : undefined}
         onClick={() => onChange("stays")}
         type="button"
@@ -353,252 +281,6 @@ function ExploreTabs({
         Flights
       </button>
     </nav>
-  );
-}
-
-function ContextSelector({
-  points,
-  selectedId,
-  onSelect,
-}: {
-  points: ContextPoint[];
-  selectedId: string | null;
-  onSelect: (point: ContextPoint) => void;
-}) {
-  return (
-    <section className="panel context-panel" aria-labelledby="context-title">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">YOUR TRIP, IN PLACE</p>
-          <h2 id="context-title">Choose a context point</h2>
-        </div>
-        <span className="count-badge">{points.length}</span>
-      </div>
-      <div className="context-list">
-        {points.map((point) => {
-          const usable =
-            point.status === "active" &&
-            point.resolution_status === "resolved" &&
-            point.latitude !== null &&
-            point.longitude !== null;
-          return (
-            <button
-              className={`context-option ${selectedId === point.id ? "selected" : ""}`}
-              disabled={!usable}
-              key={point.id}
-              onClick={() => onSelect(point)}
-              type="button"
-            >
-              <span className={`context-icon ${usable ? "ready" : "muted"}`}>
-                {point.type === "hotel"
-                  ? "⌂"
-                  : point.type === "airport"
-                    ? "✈"
-                    : "◎"}
-              </span>
-              <span className="context-copy">
-                <strong>{point.label}</strong>
-                <small>{point.address ?? point.type}</small>
-                {!usable ? <em>Needs confirmation</em> : null}
-              </span>
-              {selectedId === point.id ? (
-                <span className="selected-check">✓</span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function EventCard({
-  event,
-  sources,
-  timezone,
-  selected,
-  onSelect,
-}: {
-  event: EventItem;
-  sources: EventDiscoveryResponse["sources"];
-  timezone: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const eventSources = sources.filter((source) =>
-    event.source_ids.includes(source.id),
-  );
-  return (
-    <article className={`event-card ${selected ? "selected" : ""}`}>
-      <div className="event-card-topline">
-        <span className="tag coral">{event.category ?? "Local event"}</span>
-        <span className="fresh-label">{event.status}</span>
-      </div>
-      <h3>{event.title}</h3>
-      <p className="event-meta">
-        <span>◷</span> {formatDate(event.starts_at, timezone)}
-      </p>
-      <p className="event-meta">
-        <span>⌖</span> {event.venue_name ?? "Venue details in source"}
-      </p>
-      {event.description ? (
-        <p className="event-description">{event.description}</p>
-      ) : null}
-      <details className="source-details">
-        <summary>Source and freshness</summary>
-        {eventSources.length > 0 ? (
-          eventSources.map((source) => (
-            <div className="source-row" key={source.id}>
-              <span>
-                {source.provider} · {source.freshness}
-              </span>
-              <small>Retrieved {formatDate(source.retrieved_at, "UTC")}</small>
-              {source.url ? (
-                <a href={source.url} target="_blank" rel="noreferrer">
-                  Open source ↗
-                </a>
-              ) : null}
-            </div>
-          ))
-        ) : (
-          <small>Source metadata is not available.</small>
-        )}
-      </details>
-      <button
-        className={`button ${selected ? "secondary" : "accent"} wide`}
-        onClick={onSelect}
-        type="button"
-      >
-        {selected ? "Selected for booking" : "Review booking"}
-      </button>
-    </article>
-  );
-}
-
-function BookingPanel({
-  event,
-  booking,
-  payment,
-  busy,
-  quote,
-  quoteError,
-  onCreate,
-  onPayment,
-  onOpenInvoices,
-}: {
-  event: EventItem | null;
-  quote: BookingQuote | null;
-  quoteError: string | null;
-  booking: Booking | null;
-  payment: Payment | null;
-  busy: boolean;
-  onCreate: () => void;
-  onPayment: (outcome: "succeeded" | "failed") => void;
-  onOpenInvoices: () => void;
-}) {
-  if (!event) {
-    return (
-      <aside className="panel booking-panel empty-panel">
-        <span className="panel-icon">♧</span>
-        <h2>Your booking desk</h2>
-        <p>Select an event to review the internal booking before you pay.</p>
-      </aside>
-    );
-  }
-
-  const confirmed =
-    payment?.status === "succeeded" && booking?.status === "confirmed";
-  const failed = payment?.status === "failed" || booking?.status === "failed";
-  return (
-    <aside className="panel booking-panel" aria-labelledby="booking-title">
-      <p className="eyebrow">INTERNAL BOOKING</p>
-      <h2 id="booking-title">{event.title}</h2>
-      <p className="booking-location">{event.venue_name ?? "Selected event"}</p>
-      <div className="price-summary">
-        <span>Demo event price</span>
-        {quote ? (
-          <>
-            <strong>{formatMoney(quote.currency, quote.total)}</strong>
-            <small>
-              Includes {formatMoney(quote.currency, quote.tax)} tax · Price
-              policy {quote.policy_version} · No real money moves
-            </small>
-          </>
-        ) : quoteError ? (
-          <small role="alert">Price unavailable: {quoteError}</small>
-        ) : (
-          <small role="status">Getting the price…</small>
-        )}
-      </div>
-      {!booking ? (
-        <>
-          <p className="booking-note">
-            Review this booking before creating it. The event remains a
-            suggestion until you confirm payment.
-          </p>
-          <button
-            className="button primary wide"
-            disabled={busy || !quote}
-            onClick={onCreate}
-            type="button"
-          >
-            {busy ? "Creating booking…" : "Confirm booking details"}
-          </button>
-        </>
-      ) : confirmed ? (
-        <StatusBanner tone="success">
-          <strong>Booking confirmed</strong>
-          <span>
-            Confirmation {booking.confirmation_code ?? booking.id.slice(0, 8)}
-          </span>
-          <button
-            className="button secondary"
-            onClick={onOpenInvoices}
-            type="button"
-          >
-            View invoice
-          </button>
-        </StatusBanner>
-      ) : failed ? (
-        <StatusBanner tone="error">
-          <strong>Payment failed</strong>
-          <span>
-            This booking was not confirmed. Start a new booking to try again.
-          </span>
-        </StatusBanner>
-      ) : (
-        <>
-          <div className="status-line">
-            <span>Booking</span>
-            <strong>{booking.status.replace("_", " ")}</strong>
-          </div>
-          <div className="payment-choice">
-            <p className="eyebrow">DUMMY PAYMENT</p>
-            <p>
-              Choose an outcome for the demo. No card details are collected.
-            </p>
-            <div className="button-row">
-              <button
-                className="button primary"
-                disabled={busy}
-                onClick={() => onPayment("succeeded")}
-                type="button"
-              >
-                Pay successfully
-              </button>
-              <button
-                className="button danger"
-                disabled={busy}
-                onClick={() => onPayment("failed")}
-                type="button"
-              >
-                Simulate failure
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </aside>
   );
 }
 
@@ -629,23 +311,11 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [contexts, setContexts] = useState<ContextPoint[]>([]);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [context, setContext] = useState<ContextPoint | null>(null);
-  const [discovery, setDiscovery] = useState<EventDiscoveryResponse | null>(
-    null,
-  );
-  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
-  const [booking, setBooking] = useState<Booking | null>(null);
-  const [quote, setQuote] = useState<BookingQuote | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [payment, setPayment] = useState<Payment | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [category, setCategory] = useState("business_events");
-  const [date, setDate] = useState("");
-  const [fromTime, setFromTime] = useState("");
-  const [toTime, setToTime] = useState("");
   const [view, setView] = useState<ViewId>("explore");
-  const [exploreMode, setExploreMode] = useState<ExploreMode>("nearby");
+  const [exploreMode, setExploreMode] = useState<ExploreMode>("stays");
 
   function showView(next: ViewId) {
     setView(next);
@@ -704,12 +374,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     tripRef.current = trip;
   }, [trip]);
 
-  useEffect(() => {
-    setDate(datePart(trip?.start_at ?? null));
-    setFromTime(timePart(trip?.start_at ?? null, trip?.timezone ?? "UTC"));
-    setToTime(timePart(trip?.end_at ?? null, trip?.timezone ?? "UTC"));
-  }, [trip?.id, trip?.start_at, trip?.end_at, trip?.timezone]);
-
   function firstResolvedPoint(points: ContextPoint[]): ContextPoint | null {
     return (
       points.find(
@@ -724,10 +388,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     const mine = ++activation.current;
     tripRef.current = next;
     setTrip(next);
-    setDiscovery(null);
-    setSelectedEvent(null);
-    setBooking(null);
-    setPayment(null);
     setContexts([]);
     setContext(null);
     if (!next) return;
@@ -785,93 +445,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     });
   }
 
-  const tripId = trip?.id ?? null;
-  const hasSelectedEvent = selectedEvent !== null;
-  useEffect(() => {
-    setQuote(null);
-    setQuoteError(null);
-    if (!tripId || !hasSelectedEvent) return;
-    let current = true;
-    getBookingQuote(tripId, "event").then(
-      (result) => {
-        if (current) setQuote(result);
-      },
-      (caught: unknown) => {
-        if (current) setQuoteError(friendlyError(caught));
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [tripId, hasSelectedEvent]);
-
-  async function searchEvents(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!trip || !context) return;
-    setBusy(true);
-    setError(null);
-    setDiscovery(null);
-    setSelectedEvent(null);
-    setBooking(null);
-    setPayment(null);
-    try {
-      const result = await discoverEvents(trip.id, {
-        context_point_id: context.id,
-        observed_for: {
-          from: timezoneTimestamp(date, fromTime, context.timezone),
-          to: timezoneTimestamp(date, toTime, context.timezone),
-          timezone: context.timezone,
-        },
-        filters: { category, radius_preference: "nearby", language: "en" },
-      });
-      setDiscovery(result);
-    } catch (caught) {
-      setError(friendlyError(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function confirmBooking() {
-    if (!trip || !selectedEvent) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await createBooking(trip.id, {
-        booking_type: "event",
-        source_type: "event_discovery_result",
-        source_id: selectedEvent.id,
-        ...(selectedEvent.starts_at
-          ? { starts_at: selectedEvent.starts_at }
-          : {}),
-        ...(selectedEvent.ends_at ? { ends_at: selectedEvent.ends_at } : {}),
-      });
-      setBooking(result);
-    } catch (caught) {
-      setError(friendlyError(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function choosePayment(outcome: "succeeded" | "failed") {
-    if (!trip || !booking) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await simulatePayment(trip.id, booking.id, outcome);
-      setBooking(result.booking);
-      setPayment(result.payment);
-    } catch (caught) {
-      setError(friendlyError(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const activeEvents = discovery?.items ?? [];
-  const selectedSource = useMemo(() => discovery?.sources ?? [], [discovery]);
-
   if (loading) {
     return (
       <main className="app-shell loading-shell">
@@ -901,11 +474,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
         </div>
       </header>
       <div
-        className={
-          view === "explore" && exploreMode === "nearby"
-            ? "workspace-grid"
-            : "workspace-grid two-column"
-        }
+        className="workspace-grid two-column"
       >
         <aside className="sidebar">
           <nav className="side-nav" aria-label="Workspace navigation">
@@ -944,140 +513,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
               </div>
               {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
               <ExploreTabs active={exploreMode} onChange={showExploreMode} />
-              {exploreMode === "nearby" ? (
-                <>
-                  <ContextSelector
-                    points={contexts}
-                    selectedId={context?.id ?? null}
-                    onSelect={(point) => {
-                      setContext(point);
-                      setDiscovery(null);
-                      setSelectedEvent(null);
-                      setBooking(null);
-                      setPayment(null);
-                    }}
-                  />
-                  <section
-                    className="panel discovery-panel"
-                    id="discover"
-                    aria-labelledby="discover-title"
-                  >
-                    <div className="section-heading">
-                      <div>
-                        <p className="eyebrow">LIVE DISCOVERY</p>
-                        <h2 id="discover-title">What is happening nearby?</h2>
-                      </div>
-                      <span className="tag sage">Context-aware</span>
-                    </div>
-                    <form className="discovery-form" onSubmit={searchEvents}>
-                      <label>
-                        Category
-                        <input
-                          value={category}
-                          onChange={(event) => setCategory(event.target.value)}
-                          placeholder="business events"
-                        />
-                      </label>
-                      <label>
-                        Date
-                        <input
-                          type="date"
-                          value={date}
-                          onChange={(event) => setDate(event.target.value)}
-                          required
-                        />
-                      </label>
-                      <label>
-                        From
-                        <input
-                          type="time"
-                          value={fromTime}
-                          onChange={(event) => setFromTime(event.target.value)}
-                          required
-                        />
-                      </label>
-                      <label>
-                        Until
-                        <input
-                          type="time"
-                          value={toTime}
-                          onChange={(event) => setToTime(event.target.value)}
-                          required
-                        />
-                      </label>
-                      <button
-                        className="button accent search-button"
-                        disabled={busy || !context}
-                        type="submit"
-                      >
-                        {busy ? "Searching…" : "Find nearby"}
-                      </button>
-                    </form>
-                    {!context ? (
-                      <p className="helper-text">
-                        Choose a resolved context point before searching.
-                      </p>
-                    ) : (
-                      <p className="helper-text">
-                        Searching around <strong>{context.label}</strong> in{" "}
-                        {context.timezone}.
-                      </p>
-                    )}
-                  </section>
-                  <section className="results-section" aria-live="polite">
-                    <div className="section-heading">
-                      <div>
-                        <p className="eyebrow">YOUR SHORTLIST</p>
-                        <h2>Events and activities</h2>
-                      </div>
-                      {discovery ? (
-                        <span className="fresh-label">
-                          {discovery.freshness ?? "fresh"} ·{" "}
-                          {formatDate(discovery.retrieved_at, "UTC")}
-                        </span>
-                      ) : null}
-                    </div>
-                    {discovery?.limitations?.length ? (
-                      <details className="limitations">
-                        <summary>About this search</summary>
-                        {discovery.limitations.map((limitation) => (
-                          <p key={limitation}>{limitation}</p>
-                        ))}
-                      </details>
-                    ) : null}
-                    {discovery && activeEvents.length === 0 ? (
-                      <div className="empty-state">
-                        <span className="panel-icon">⌕</span>
-                        <h3>No matching events yet</h3>
-                        <p>
-                          Try a wider category or another time range. The live
-                          provider did not return a valid event for this search.
-                        </p>
-                      </div>
-                    ) : null}
-                    <div className="event-grid">
-                      {activeEvents.map((event) => (
-                        <EventCard
-                          key={event.id}
-                          event={event}
-                          sources={selectedSource}
-                          timezone={
-                            context?.timezone ?? trip?.timezone ?? "UTC"
-                          }
-                          selected={selectedEvent?.id === event.id}
-                          onSelect={() => {
-                            if (selectedEvent?.id !== event.id) {
-                              setBooking(null);
-                              setPayment(null);
-                            }
-                            setSelectedEvent(event);
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                </>
-              ) : exploreMode === "stays" ? (
+              {exploreMode === "stays" ? (
                 trip ? (
                   <HotelsView
                     trip={trip}
@@ -1144,19 +580,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
             </StatusBanner>
           )}
         </section>
-        {view === "explore" && exploreMode === "nearby" ? (
-          <BookingPanel
-            event={selectedEvent}
-            booking={booking}
-            payment={payment}
-            quote={quote}
-            quoteError={quoteError}
-            busy={busy}
-            onCreate={() => void confirmBooking()}
-            onPayment={(outcome) => void choosePayment(outcome)}
-            onOpenInvoices={() => showView("invoices")}
-          />
-        ) : null}
       </div>
     </main>
   );

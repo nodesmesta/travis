@@ -85,8 +85,7 @@ export default function BookingsView({ trip, onOpenInvoices }: ViewProps) {
           <span className="panel-icon">▣</span>
           <h3>No reservations yet</h3>
           <p>
-            Explore nearby events, search a stay, or compare flights to add the
-            first reservation.
+            Search a stay or compare flights to add the first reservation.
           </p>
         </div>
       ) : null}

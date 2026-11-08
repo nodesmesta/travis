@@ -19,6 +19,8 @@ import {
   providerStateLabel,
   providerStateTone,
 } from "./provider-booking-parts";
+import { CURRENCIES } from "./places-options";
+import { useTraveller } from "./use-traveller";
 import type { ViewProps } from "./types";
 
 function wait(milliseconds: number): Promise<void> {
@@ -88,9 +90,10 @@ export default function FlightsView({
   onOpenInvoices,
   onOpenBookings,
 }: ViewProps) {
+  const traveller = useTraveller();
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
-  const [date, setDate] = useState(datePart(trip.start_at));
+  const [date, setDate] = useState("");
   const [result, setResult] = useState<FlightSearchResponse | null>(null);
   const [selected, setSelected] = useState<FlightJourney | null>(null);
   const [prebook, setPrebook] = useState<FlightPrebookAttempt | null>(null);
@@ -102,11 +105,11 @@ export default function FlightsView({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
-  const [nationality, setNationality] = useState("");
+  const [nationality, setNationality] = useState("ID");
   const [passportNumber, setPassportNumber] = useState("");
   const [passportExpiry, setPassportExpiry] = useState("");
-  const [issueCountry, setIssueCountry] = useState("");
-  const [currency, setCurrency] = useState("");
+  const [issueCountry, setIssueCountry] = useState("ID");
+  const [currency, setCurrency] = useState("USD");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +125,24 @@ export default function FlightsView({
     pollToken.current += 1;
     setError(null);
   }, [trip.id, trip.start_at]);
+
+  useEffect(() => {
+    setFirstName((current) => current || traveller.firstName);
+    setLastName((current) => current || traveller.lastName);
+    setEmail((current) => current || traveller.email);
+  }, [traveller]);
+
+  const passengerMissing = [
+    firstName.trim() ? null : "first name",
+    lastName.trim() ? null : "last name",
+    email.trim() ? null : "email",
+    phone.trim() ? null : "phone",
+    birthday ? null : "birthday",
+    nationality.trim().length === 2 ? null : "nationality (2 letters)",
+    passportNumber.trim() ? null : "passport number",
+    passportExpiry ? null : "passport expiry",
+    issueCountry.trim().length === 2 ? null : "passport issue country",
+  ].filter((value): value is string => value !== null);
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,22 +172,22 @@ export default function FlightsView({
   }
 
   async function checkout() {
-    if (!selected) return;
+    if (!selected || passengerMissing.length > 0) return;
     setBusy(true);
     setError(null);
     try {
       const passenger = {
         type: "adult" as const,
         title: "MR" as const,
-        first_name: firstName,
-        last_name: lastName,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
         birthday,
         gender: "M" as const,
-        nationality,
+        nationality: nationality.trim().toUpperCase(),
         document: {
           type: "passport" as const,
-          number: passportNumber,
-          issue_country: issueCountry,
+          number: passportNumber.trim(),
+          issue_country: issueCountry.trim().toUpperCase(),
           expiry: passportExpiry,
         },
       };
@@ -174,11 +195,11 @@ export default function FlightsView({
         offer_id: selected.cheapest.offer_id,
         purpose: "BUSINESS",
         contact: {
-          first_name: firstName,
-          last_name: lastName,
-          email,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim(),
           phone_country_code: "62",
-          phone_number: phone,
+          phone_number: phone.trim(),
         },
         passengers: [passenger],
       });
@@ -229,10 +250,14 @@ export default function FlightsView({
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">FLIGHT AVAILABILITY</p>
-            <h2 id="flight-search-title">Search a route</h2>
+            <p className="eyebrow">STEP 1 · FIND A ROUTE</p>
+            <h2 id="flight-search-title">
+              {origin && destination
+                ? `${origin} → ${destination}`
+                : "Search a route"}
+            </h2>
           </div>
-          <span className="tag coral">Sandbox provider</span>
+          <span className="tag coral">LiteAPI sandbox</span>
         </div>
         <form className="discovery-form" onSubmit={search}>
           <label>
@@ -241,6 +266,7 @@ export default function FlightsView({
               maxLength={3}
               value={origin}
               onChange={(event) => setOrigin(event.target.value.toUpperCase())}
+              placeholder="CGK"
               required
             />
           </label>
@@ -252,6 +278,7 @@ export default function FlightsView({
               onChange={(event) =>
                 setDestination(event.target.value.toUpperCase())
               }
+              placeholder="SIN"
               required
             />
           </label>
@@ -266,14 +293,17 @@ export default function FlightsView({
           </label>
           <label>
             Currency
-            <input
-              maxLength={3}
+            <select
               value={currency}
-              onChange={(event) =>
-                setCurrency(event.target.value.toUpperCase())
-              }
+              onChange={(event) => setCurrency(event.target.value)}
               required
-            />
+            >
+              {CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </select>
           </label>
           <button
             className="button accent search-button"
@@ -283,12 +313,20 @@ export default function FlightsView({
             {busy ? "Searching…" : "Search flights"}
           </button>
         </form>
+        <p className="helper-text">
+          Airport codes are three letters. One adult, one passenger per booking
+          in this sandbox.
+        </p>
       </section>
       {result ? (
         <section className="results-section" aria-live="polite">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">AVAILABLE JOURNEYS</p>
+              <p className="eyebrow">
+                {selected
+                  ? "STEP 3 · PASSENGER AND SANDBOX CHECKOUT"
+                  : "STEP 2 · PICK A JOURNEY"}
+              </p>
               <h2>{result.journeys.length} journeys shown</h2>
             </div>
             <span className="fresh-label">
@@ -314,11 +352,13 @@ export default function FlightsView({
       ) : null}
       {selected ? (
         <section className="panel payment-choice">
-          <p className="eyebrow">PASSENGER AND SANDBOX CHECKOUT</p>
+          <p className="eyebrow">
+            STEP 3 · PASSENGER AND SANDBOX CHECKOUT
+          </p>
           <p>
             {selected.segments[0]?.carrier_name ?? "Selected flight"} ·{" "}
-            {money(selected.cheapest.total)}. The provider may require a travel
-            document.
+            {money(selected.cheapest.total)}. The provider requires a travel
+            document for this fare.
           </p>
           <div className="discovery-form">
             <label>
@@ -326,6 +366,7 @@ export default function FlightsView({
               <input
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
+                required
               />
             </label>
             <label>
@@ -333,6 +374,7 @@ export default function FlightsView({
               <input
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
+                required
               />
             </label>
             <label>
@@ -341,6 +383,7 @@ export default function FlightsView({
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                required
               />
             </label>
             <label>
@@ -348,6 +391,8 @@ export default function FlightsView({
               <input
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
+                placeholder="digits only, no +"
+                required
               />
             </label>
             <label>
@@ -356,6 +401,7 @@ export default function FlightsView({
                 type="date"
                 value={birthday}
                 onChange={(event) => setBirthday(event.target.value)}
+                required
               />
             </label>
             <label>
@@ -366,6 +412,7 @@ export default function FlightsView({
                 onChange={(event) =>
                   setNationality(event.target.value.toUpperCase())
                 }
+                required
               />
             </label>
             <label>
@@ -373,6 +420,7 @@ export default function FlightsView({
               <input
                 value={passportNumber}
                 onChange={(event) => setPassportNumber(event.target.value)}
+                required
               />
             </label>
             <label>
@@ -381,6 +429,7 @@ export default function FlightsView({
                 type="date"
                 value={passportExpiry}
                 onChange={(event) => setPassportExpiry(event.target.value)}
+                required
               />
             </label>
             <label>
@@ -391,12 +440,13 @@ export default function FlightsView({
                 onChange={(event) =>
                   setIssueCountry(event.target.value.toUpperCase())
                 }
+                required
               />
             </label>
           </div>
           <button
             className="button accent"
-            disabled={busy || booked !== null}
+            disabled={busy || booked !== null || passengerMissing.length > 0}
             onClick={() => void checkout()}
             type="button"
           >
@@ -406,6 +456,11 @@ export default function FlightsView({
                 ? "Prebooking and ticketing…"
                 : "Pay sandbox payment and book"}
           </button>
+          {passengerMissing.length > 0 ? (
+            <p className="helper-text" role="status">
+              Still needed: {passengerMissing.join(", ")}.
+            </p>
+          ) : null}
           {prebook?.verification ? (
             <p className="helper-text">
               {prebook.verification.changed
@@ -423,7 +478,7 @@ export default function FlightsView({
             <div className="provider-result">
               <div className="provider-result-head">
                 <div>
-                  <p className="eyebrow">PROVIDER RESULT</p>
+                  <p className="eyebrow">STEP 4 · TICKETED</p>
                   <span className="provider-label">Confirmation code</span>
                   <strong className="provider-code">
                     {booked.provider_booking.confirmation_code ??
