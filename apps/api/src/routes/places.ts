@@ -187,30 +187,43 @@ function roomWords(value: string): string[] {
   return words.filter((word) => word.length > 1 && word !== "room");
 }
 
-/** How much of the shorter name the two share: 1 means one name sits inside the other. */
-function roomAffinity(offerName: string, contentName: string): number {
+/**
+ * Jaccard over the words of both names. Dividing by the shorter name instead
+ * would match any room containing a single generic word ("Standard Room" would
+ * claim every standard room in the hotel).
+ */
+function roomAffinity(
+  offerName: string,
+  contentName: string,
+): { score: number; shared: number } {
   const left = new Set(roomWords(offerName));
   const right = new Set(roomWords(contentName));
-  if (left.size === 0 || right.size === 0) return 0;
+  if (left.size === 0 || right.size === 0) return { score: 0, shared: 0 };
   let shared = 0;
   for (const word of left) if (right.has(word)) shared += 1;
-  return shared / Math.min(left.size, right.size);
+  const union = new Set([...left, ...right]).size;
+  return { score: shared / union, shared };
 }
 
 function contentRoomFor(
   offerName: string,
   rooms: HotelRoomContent[],
 ): HotelRoomContent | null {
+  const needle = offerName.trim().toLowerCase();
+  for (const room of rooms) {
+    if (room.name.trim().toLowerCase() === needle) return room;
+  }
   let best: HotelRoomContent | null = null;
   let bestScore = 0;
   for (const room of rooms) {
-    const score = roomAffinity(offerName, room.name);
+    const { score, shared } = roomAffinity(offerName, room.name);
+    // One shared word is not a match: at least two, and half the union.
+    if (shared < 2) continue;
     if (score > bestScore) {
       best = room;
       bestScore = score;
     }
   }
-  // Below half the words in common the "match" would be a different room.
   return bestScore >= 0.5 ? best : null;
 }
 
