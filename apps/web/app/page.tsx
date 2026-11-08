@@ -513,23 +513,25 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
               </div>
               {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
               <ExploreTabs active={exploreMode} onChange={showExploreMode} />
-              {exploreMode === "stays" ? (
-                trip ? (
-                  <HotelsView
-                    trip={trip}
-                    contexts={contexts}
-                    context={context}
-                    onSelectContext={(point) => setContext(point)}
-                    onOpenInvoices={() => showView("invoices")}
-                    onOpenBookings={() => showView("bookings")}
-                  />
-                ) : (
-                  <StatusBanner tone="warning">
-                    Open a trip before searching stays.
-                  </StatusBanner>
-                )
-              ) : trip ? (
-                <FlightsView
+              {trip === null ? (
+                <div className="empty-state">
+                  <span className="panel-icon">✈</span>
+                  <h3>Create a trip first</h3>
+                  <p>
+                    Rates are searched inside an active trip, because the trip
+                    supplies the destination, the dates and the currency. A name,
+                    a destination and a timezone are enough to start.
+                  </p>
+                  <button
+                    className="button accent"
+                    onClick={() => showView("trips")}
+                    type="button"
+                  >
+                    Create a trip
+                  </button>
+                </div>
+              ) : exploreMode === "stays" ? (
+                <HotelsView
                   trip={trip}
                   contexts={contexts}
                   context={context}
@@ -538,9 +540,14 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                   onOpenBookings={() => showView("bookings")}
                 />
               ) : (
-                <StatusBanner tone="warning">
-                  Open a trip before searching flights.
-                </StatusBanner>
+                <FlightsView
+                  trip={trip}
+                  contexts={contexts}
+                  context={context}
+                  onSelectContext={(point) => setContext(point)}
+                  onOpenInvoices={() => showView("invoices")}
+                  onOpenBookings={() => showView("bookings")}
+                />
               )}
             </>
           ) : view === "trips" ? (
