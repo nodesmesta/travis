@@ -2514,3 +2514,191 @@ body {
     width: 100%;
   }
 }
+
+/* ---------- Result rows ----------
+   Hotels and flights are listed as rows, not a grid of cards: a photo on the
+   left, the details in the middle, the price and the action on the right. */
+
+.result-list {
+  display: grid;
+  gap: 12px;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: stretch;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: white;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.result-row.flight {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.result-row.selected {
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(49, 46, 129, 0.08);
+}
+
+.result-media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 132px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e8ecff, #f7f2e7);
+}
+
+/* Absolute so the photo covers the row however tall the text makes it. */
+.result-media img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.result-media-fallback {
+  font-size: 34px;
+  font-weight: 800;
+  color: rgba(49, 46, 129, 0.32);
+}
+
+.result-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.result-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.result-title h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.result-tags > span {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f6f7fb;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.result-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  min-width: 156px;
+}
+
+.result-price-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.result-price strong {
+  font-size: 20px;
+  color: var(--indigo-dark);
+}
+
+.result-price .button {
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .result-row,
+  .result-row.flight {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .result-media {
+    min-height: 180px;
+  }
+
+  .result-price {
+    align-items: flex-start;
+  }
+}
+
+/* ---------- City combobox ---------- */
+
+.city-picker {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.city-picker input {
+  width: 100%;
+}
+
+.city-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 16px 32px rgba(15, 15, 30, 0.12);
+}
+
+.city-option {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+}
+
+.city-option.active,
+.city-option:hover {
+  background: #f2f3fb;
+}
+
+.city-option.current {
+  font-weight: 700;
+  color: var(--indigo-dark);
+}
+
+.city-note {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}

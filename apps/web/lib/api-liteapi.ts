@@ -255,3 +255,27 @@ export function cancelFlightBooking(
     true,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Places. The provider owns the country and city lists, so the search form asks
+// for them instead of carrying a hand-written list that can drift.
+
+export interface PlaceCountry {
+  code: string;
+  name: string;
+}
+
+export function listCountries(): Promise<{ countries: PlaceCountry[] }> {
+  return request("/places/countries");
+}
+
+export function searchCities(
+  country: string,
+  query: string,
+  limit = 40,
+): Promise<{ country: string; cities: string[]; total: number }> {
+  const params = new URLSearchParams({ country, limit: String(limit) });
+  const trimmed = query.trim();
+  if (trimmed) params.set("q", trimmed);
+  return request(`/places/cities?${params.toString()}`);
+}

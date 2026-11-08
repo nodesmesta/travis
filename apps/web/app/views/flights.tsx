@@ -49,7 +49,7 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Flight request failed.";
 }
 
-function JourneyCard({
+export function JourneyCard({
   journey,
   selected,
   onSelect,
@@ -61,37 +61,51 @@ function JourneyCard({
   const first = journey.segments[0];
   const last = journey.segments[journey.segments.length - 1];
   if (!first || !last) return null;
+  const hours = Math.floor(journey.duration_minutes / 60);
+  const minutes = journey.duration_minutes % 60;
   return (
-    <article className={`event-card ${selected ? "selected" : ""}`}>
-      <div className="event-card-topline">
-        <span className="tag coral">{first.carrier_name}</span>
-        <span className="fresh-label">
-          {journey.stops === 0 ? "Direct" : `${journey.stops} stop(s)`}
-        </span>
+    <article className={`result-row flight ${selected ? "selected" : ""}`}>
+      <div className="result-body">
+        <div className="result-title">
+          <h3>
+            {first.carrier_name} · {first.flight_number}
+          </h3>
+          <span className="tag coral">
+            {journey.stops === 0 ? "Direct" : `${journey.stops} stop`}
+          </span>
+        </div>
+        <p className="event-meta">
+          <span>✈</span> {first.origin_code} {first.departs_local} →{" "}
+          {last.destination_code} {last.arrives_local}
+        </p>
+        <p className="event-meta">
+          <span>◷</span> {hours}h {minutes}m ·{" "}
+          {journey.cheapest.cabin ?? "Cabin unavailable"}
+        </p>
+        <div className="result-tags">
+          <span>
+            {journey.cheapest.carry_on_included
+              ? "Carry-on included"
+              : "Carry-on unavailable"}
+          </span>
+          <span>
+            {journey.cheapest.checked_bag_included
+              ? "Checked bag included"
+              : "Checked bag extra"}
+          </span>
+        </div>
       </div>
-      <h3>
-        {first.flight_number} · {first.origin_code} → {last.destination_code}
-      </h3>
-      <p className="event-meta">
-        ◷ {first.departs_local} → {last.arrives_local}
-      </p>
-      <p className="event-meta">
-        {Math.round(journey.duration_minutes / 60)}h{" "}
-        {journey.duration_minutes % 60}m · {money(journey.cheapest.total)}
-      </p>
-      <p className="event-description">
-        {journey.cheapest.cabin ?? "Cabin unavailable"} ·{" "}
-        {journey.cheapest.carry_on_included
-          ? "Carry-on included"
-          : "Carry-on unavailable"}
-      </p>
-      <button
-        className={`button ${selected ? "secondary" : "accent"} wide`}
-        onClick={onSelect}
-        type="button"
-      >
-        {selected ? "Selected" : "Select flight"}
-      </button>
+      <div className="result-price">
+        <span className="result-price-label">Total fare</span>
+        <strong>{money(journey.cheapest.total)}</strong>
+        <button
+          className={`button ${selected ? "secondary" : "accent"} wide`}
+          onClick={onSelect}
+          type="button"
+        >
+          {selected ? "Selected" : "Select flight"}
+        </button>
+      </div>
     </article>
   );
 }
@@ -408,7 +422,7 @@ export default function FlightsView({
               {result.total_found} found · {result.retrieved_at}
             </span>
           </div>
-          <div className="event-grid">
+          <div className="result-list">
             {result.journeys.map((journey) => (
               <JourneyCard
                 key={journey.journey_key}
