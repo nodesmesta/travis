@@ -50,6 +50,8 @@ export interface ExploreViewProps {
   onEnsureTrip: (input: EnsureTripInput) => Promise<Trip>;
   onOpenInvoices?: () => void;
   onOpenBookings?: () => void;
+  /** The trip the booking lands in; opens the Trips view. */
+  onOpenTrips?: () => void;
 }
 
 export type ViewId =

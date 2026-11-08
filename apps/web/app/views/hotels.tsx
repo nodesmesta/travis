@@ -346,6 +346,7 @@ export default function HotelsView({
   onEnsureTrip,
   onOpenInvoices,
   onOpenBookings,
+  onOpenTrips,
 }: ExploreViewProps) {
   const traveller = useTraveller();
   const [activeTripId, setActiveTripId] = useState<string | null>(null);
@@ -848,7 +849,20 @@ export default function HotelsView({
                 >
                   Invoices
                 </button>
+                {onOpenTrips ? (
+                  <button
+                    className="button accent"
+                    onClick={onOpenTrips}
+                    type="button"
+                  >
+                    Open the trip
+                  </button>
+                ) : null}
               </div>
+              <p className="helper-text">
+                This stay is on your trip now and stays there until it is
+                cancelled.
+              </p>
             </div>
           ) : null}
           {detail ? (

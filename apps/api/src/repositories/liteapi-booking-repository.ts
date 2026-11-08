@@ -2,12 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../errors.js";
 import type {
+  AgendaItem,
   Booking,
   Database,
   Payment,
   ProviderBooking,
   ProviderBookingInsert,
   ProviderBookingUpdate,
+  Trip,
 } from "../supabase/database.types.js";
 
 type UserClient = SupabaseClient<Database>;
@@ -203,6 +205,76 @@ export class LiteApiBookingRepository {
       .limit(1)
       .maybeSingle();
     if (error) throw persistenceFailure("payments.provider_get");
+    return data;
+  }
+
+  // -------------------------------------------------------------------------
+  // The trip a booking belongs to. A confirmed ticket fills the trip's window
+  // and adds itself to the itinerary, so booking and planning stay one action.
+
+  public async getTrip(tripId: string): Promise<Trip | null> {
+    const { data, error } = await this.client
+      .from("trips")
+      .select("*")
+      .eq("id", tripId)
+      .maybeSingle();
+    if (error) throw persistenceFailure("trips.get_for_booking");
+    return data;
+  }
+
+  public async updateTripForBooking(
+    tripId: string,
+    patch: Pick<Trip, "start_at" | "end_at" | "status">,
+  ): Promise<Trip> {
+    const { data, error } = await this.client
+      .from("trips")
+      .update(patch)
+      .eq("id", tripId)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("trips.update_for_booking");
+    return data;
+  }
+
+  public async findAgendaForProviderBooking(
+    tripId: string,
+    providerBookingId: string,
+  ): Promise<AgendaItem | null> {
+    const { data, error } = await this.client
+      .from("agenda_items")
+      .select("*")
+      .eq("trip_id", tripId)
+      .filter("metadata->>provider_booking_id", "eq", providerBookingId)
+      .maybeSingle();
+    if (error) throw persistenceFailure("agenda_items.get_for_booking");
+    return data;
+  }
+
+  public async createAgendaItem(
+    input: Database["public"]["Tables"]["agenda_items"]["Insert"],
+  ): Promise<AgendaItem> {
+    const { data, error } = await this.client
+      .from("agenda_items")
+      .insert(input)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("agenda_items.create_for_booking");
+    return data;
+  }
+
+  public async updateAgendaItem(
+    id: string,
+    tripId: string,
+    patch: Database["public"]["Tables"]["agenda_items"]["Update"],
+  ): Promise<AgendaItem> {
+    const { data, error } = await this.client
+      .from("agenda_items")
+      .update(patch)
+      .eq("id", id)
+      .eq("trip_id", tripId)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("agenda_items.update_for_booking");
     return data;
   }
 }

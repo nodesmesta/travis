@@ -315,16 +315,85 @@ function parseFlightSeats(body: unknown): Array<{
   });
 }
 
+/** The itinerary the traveller booked, mirrored onto the trip. */
+function parseFlightSchedule(body: Record<string, unknown>):
+  | { segments: Array<{
+      origin_code: string;
+      origin_name: string | null;
+      destination_code: string;
+      destination_name: string | null;
+      departs_at: string;
+      arrives_at: string;
+      carrier_name: string;
+      flight_number: string;
+    }> }
+  | undefined {
+  const raw = body.schedule;
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "schedule must be an object.",
+    );
+  const segmentsRaw = (raw as Record<string, unknown>).segments;
+  if (!Array.isArray(segmentsRaw) || segmentsRaw.length === 0 || segmentsRaw.length > 4)
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "schedule.segments must contain between 1 and 4 segments.",
+    );
+  const segments = segmentsRaw.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new AppError(
+        "REQUEST_INVALID",
+        "validation",
+        400,
+        `schedule.segments[${index}] must be an object.`,
+      );
+    const segment = entry as Record<string, unknown>;
+    const field = (key: string) =>
+      nestedString(segment, key, `schedule.segments[${index}].${key}`);
+    const optional = (key: string) =>
+      typeof segment[key] === "string" ? (segment[key] as string) : null;
+    return {
+      origin_code: field("origin_code"),
+      origin_name: optional("origin_name"),
+      destination_code: field("destination_code"),
+      destination_name: optional("destination_name"),
+      departs_at: field("departs_at"),
+      arrives_at: field("arrives_at"),
+      carrier_name: field("carrier_name"),
+      flight_number: field("flight_number"),
+    };
+  });
+  return { segments };
+}
+
 function parseFlightPrebook(body: unknown): {
   offer_id: string;
   purpose: "BUSINESS" | "LEISURE";
   contact: Person & { phone_country_code: string; phone_number: string };
   passengers: FlightPassenger[];
+  schedule:
+    | { segments: Array<{
+        origin_code: string;
+        origin_name: string | null;
+        destination_code: string;
+        destination_name: string | null;
+        departs_at: string;
+        arrives_at: string;
+        carrier_name: string;
+        flight_number: string;
+      }> }
+    | undefined;
 } {
   const input = bodyRecord(body);
   only(
     input,
-    ["offer_id", "purpose", "contact", "passengers"],
+    ["offer_id", "purpose", "contact", "passengers", "schedule"],
     "flight prebook",
   );
   const purpose = requiredString(input, "purpose");
@@ -462,6 +531,7 @@ function parseFlightPrebook(body: unknown): {
     purpose: purpose as "BUSINESS" | "LEISURE",
     contact,
     passengers,
+    schedule: parseFlightSchedule(input),
   };
 }
 
@@ -648,6 +718,7 @@ export const liteApiRoutes: RouteModule = async (context) => {
           purpose: input.purpose,
           contact: input.contact,
           passengers: input.passengers,
+          schedule: input.schedule,
         }),
     );
     writeJson(context.response, 200, {
