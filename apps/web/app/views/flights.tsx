@@ -21,7 +21,7 @@ import {
 } from "./provider-booking-parts";
 import { CURRENCIES } from "./places-options";
 import { useTraveller } from "./use-traveller";
-import type { ViewProps } from "./types";
+import type { ExploreViewProps } from "./types";
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -29,6 +29,16 @@ function wait(milliseconds: number): Promise<void> {
 
 function datePart(value: string | null): string {
   return value ? value.slice(0, 10) : "";
+}
+
+/** A date `days` from today, in the browser timezone, as `YYYY-MM-DD`. */
+function dateFromToday(days: number): string {
+  const target = new Date();
+  target.setDate(target.getDate() + days);
+  const year = target.getFullYear();
+  const month = `${target.getMonth() + 1}`.padStart(2, "0");
+  const day = `${target.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 function money(value: { amount: number; currency: string }): string {
   return `${value.currency} ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value.amount)}`;
@@ -87,10 +97,14 @@ function JourneyCard({
 
 export default function FlightsView({
   trip,
+  onEnsureTrip,
   onOpenInvoices,
   onOpenBookings,
-}: ViewProps) {
+}: ExploreViewProps) {
   const traveller = useTraveller();
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  /** The trip this search opened itself; re-rendering must not wipe the results. */
+  const openedTripId = useRef<string | null>(null);
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [date, setDate] = useState("");
@@ -114,9 +128,14 @@ export default function FlightsView({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (trip && openedTripId.current === trip.id) {
+      setActiveTripId(trip.id);
+      return;
+    }
+    setActiveTripId(trip?.id ?? null);
     setOrigin("");
     setDestination("");
-    setDate(datePart(trip.start_at));
+    setDate(datePart(trip?.start_at ?? null) || dateFromToday(7));
     setResult(null);
     setSelected(null);
     setPrebook(null);
@@ -124,7 +143,7 @@ export default function FlightsView({
     setPolling(false);
     pollToken.current += 1;
     setError(null);
-  }, [trip.id, trip.start_at]);
+  }, [trip?.id, trip?.start_at]);
 
   useEffect(() => {
     setFirstName((current) => current || traveller.firstName);
@@ -144,6 +163,20 @@ export default function FlightsView({
     issueCountry.trim().length === 2 ? null : "passport issue country",
   ].filter((value): value is string => value !== null);
 
+  /** Flights are ticketed into a trip; open one from the route when there is none. */
+  async function requireTrip(): Promise<string> {
+    if (activeTripId) return activeTripId;
+    const created = await onEnsureTrip({
+      name: `${origin} → ${destination} flight`.slice(0, 160),
+      destination: `${origin} → ${destination}`.slice(0, 500),
+      startDate: date,
+      endDate: date,
+    });
+    openedTripId.current = created.id;
+    setActiveTripId(created.id);
+    return created.id;
+  }
+
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -154,8 +187,9 @@ export default function FlightsView({
     setPolling(false);
     pollToken.current += 1;
     try {
+      const tripId = await requireTrip();
       setResult(
-        await searchFlights(trip.id, {
+        await searchFlights(tripId, {
           origin,
           destination,
           date,
@@ -191,7 +225,8 @@ export default function FlightsView({
           expiry: passportExpiry,
         },
       };
-      const next = await prebookFlight(trip.id, {
+      const tripId = await requireTrip();
+      const next = await prebookFlight(tripId, {
         offer_id: selected.cheapest.offer_id,
         purpose: "BUSINESS",
         contact: {
@@ -204,8 +239,8 @@ export default function FlightsView({
         passengers: [passenger],
       });
       setPrebook(next);
-      await simulatePayment(trip.id, next.booking.id, "succeeded");
-      const bookingResult = await bookFlight(trip.id, next.provider_booking.id);
+      await simulatePayment(tripId, next.booking.id, "succeeded");
+      const bookingResult = await bookFlight(tripId, next.provider_booking.id);
       setBooked(bookingResult);
       if (
         bookingResult.provider_booking.state === "pending" ||
@@ -228,7 +263,10 @@ export default function FlightsView({
       for (let attempt = 0; attempt < 12; attempt += 1) {
         await wait(attempt === 0 ? 3000 : 5000);
         if (token !== pollToken.current) return;
-        const response = await getFlightBooking(trip.id, providerBookingId);
+        const response = await getFlightBooking(
+          activeTripId ?? "",
+          providerBookingId,
+        );
         if (token !== pollToken.current) return;
         setBooked(response);
         const state = response.provider_booking.state;
@@ -502,7 +540,7 @@ export default function FlightsView({
                 bookingType="flight"
               />
               <ProviderBookingActions
-                tripId={trip.id}
+                tripId={activeTripId ?? ""}
                 bookingType="flight"
                 providerBookingId={booked.provider_booking.id}
                 canCancel={cancellableState(booked.provider_booking.state)}
