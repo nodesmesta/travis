@@ -10,7 +10,12 @@ import FlightsView from "./views/flights";
 import HotelsView from "./views/hotels";
 import MobilityView from "./views/mobility";
 import TripsView from "./views/trips";
-import { VIEWS, type ViewId, type ViewProps } from "./views/types";
+import {
+  VIEWS,
+  type EnsureTripInput,
+  type ViewId,
+  type ViewProps,
+} from "./views/types";
 import {
   useEffect,
   useRef,
@@ -25,6 +30,8 @@ import {
   startGoogleSignIn,
 } from "../lib/auth";
 import { ApiClientError, listContextPoints, listTrips } from "../lib/api";
+import { createTrip, newIdempotencyKey } from "../lib/api-trips";
+import type { CreateTripBody } from "../lib/types-trips";
 import type { ContextPoint, Trip } from "../lib/types";
 
 function friendlyError(error: unknown): string {
@@ -251,6 +258,25 @@ function workspaceHash(view: ViewId, exploreMode: ExploreMode): string {
   return view === "explore" ? `#explore/${exploreMode}` : `#${view}`;
 }
 
+/** `YYYY-MM-DD` + `HH:MM` in `timezone`, written with its UTC offset. */
+function offsetDateTime(date: string, time: string, timezone: string): string {
+  const probe = new Date(`${date}T${time}:00Z`);
+  const zone =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(probe)
+      .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const offset = zone.replace("GMT", "") || "+00:00";
+  return `${date}T${time}:00${offset}`;
+}
+
+function browserTimezone(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return zone && zone.length > 0 ? zone : "UTC";
+}
+
 function replaceHash(hash: string) {
   if (window.location.hash !== hash) {
     window.history.replaceState(null, "", hash);
@@ -445,6 +471,31 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
     });
   }
 
+  /**
+   * Opens a trip for a search that has none yet. The traveller never fills a
+   * trip form just to look at rates: the search supplies the name, destination
+   * and dates, and the trip becomes the container of the booking.
+   */
+  async function ensureTrip(input: EnsureTripInput): Promise<Trip> {
+    const timezone = browserTimezone();
+    const body: CreateTripBody = {
+      name: input.name,
+      timezone,
+      ...(input.destination ? { destination_summary: input.destination } : {}),
+      ...(input.startDate
+        ? { start_at: offsetDateTime(input.startDate, "09:00", timezone) }
+        : {}),
+      ...(input.endDate
+        ? { end_at: offsetDateTime(input.endDate, "18:00", timezone) }
+        : {}),
+    };
+    const created = await createTrip(body, newIdempotencyKey("trip"));
+    tripRef.current = created;
+    setTrips((current) => [created, ...current]);
+    setTrip(created);
+    return created;
+  }
+
   if (loading) {
     return (
       <main className="app-shell loading-shell">
@@ -513,29 +564,13 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
               </div>
               {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
               <ExploreTabs active={exploreMode} onChange={showExploreMode} />
-              {trip === null ? (
-                <div className="empty-state">
-                  <span className="panel-icon">✈</span>
-                  <h3>Create a trip first</h3>
-                  <p>
-                    Rates are searched inside an active trip, because the trip
-                    supplies the destination, the dates and the currency. A name,
-                    a destination and a timezone are enough to start.
-                  </p>
-                  <button
-                    className="button accent"
-                    onClick={() => showView("trips")}
-                    type="button"
-                  >
-                    Create a trip
-                  </button>
-                </div>
-              ) : exploreMode === "stays" ? (
+              {exploreMode === "stays" ? (
                 <HotelsView
                   trip={trip}
                   contexts={contexts}
                   context={context}
                   onSelectContext={(point) => setContext(point)}
+                  onEnsureTrip={ensureTrip}
                   onOpenInvoices={() => showView("invoices")}
                   onOpenBookings={() => showView("bookings")}
                 />
@@ -545,6 +580,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                   contexts={contexts}
                   context={context}
                   onSelectContext={(point) => setContext(point)}
+                  onEnsureTrip={ensureTrip}
                   onOpenInvoices={() => showView("invoices")}
                   onOpenBookings={() => showView("bookings")}
                 />

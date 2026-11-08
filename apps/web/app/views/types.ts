@@ -26,6 +26,32 @@ export interface TripsViewProps extends Omit<ViewProps, "trip"> {
   trip: Trip | null;
 }
 
+/**
+ * A search the Explore views turn into a trip when the traveller has none yet.
+ * The workspace owns trip creation, so the views only describe what was typed.
+ */
+export interface EnsureTripInput {
+  name: string;
+  destination: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Explore searches before it knows the trip. Hotel and flight search need a trip
+ * only as the container of the booking, so the views ask the workspace to open
+ * one from the search itself instead of sending the traveller to Trips first.
+ */
+export interface ExploreViewProps {
+  trip: Trip | null;
+  contexts: ContextPoint[];
+  context: ContextPoint | null;
+  onSelectContext: (point: ContextPoint) => void;
+  onEnsureTrip: (input: EnsureTripInput) => Promise<Trip>;
+  onOpenInvoices?: () => void;
+  onOpenBookings?: () => void;
+}
+
 export type ViewId =
   | "explore"
   | "mobility"

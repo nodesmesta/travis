@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiClientError, simulatePayment } from "../../lib/api";
 import {
   prebookHotel,
@@ -25,10 +25,20 @@ import {
   guessCountryCode,
 } from "./places-options";
 import { useTraveller } from "./use-traveller";
-import type { ViewProps } from "./types";
+import type { ExploreViewProps } from "./types";
 
 function datePart(value: string | null): string {
   return value ? value.slice(0, 10) : "";
+}
+
+/** A date `days` from today, in the browser timezone, as `YYYY-MM-DD`. */
+function dateFromToday(days: number): string {
+  const target = new Date();
+  target.setDate(target.getDate() + days);
+  const year = target.getFullYear();
+  const month = `${target.getMonth() + 1}`.padStart(2, "0");
+  const day = `${target.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function money(value: { amount: number; currency: string }): string {
@@ -98,10 +108,14 @@ function HotelCard({
 
 export default function HotelsView({
   trip,
+  onEnsureTrip,
   onOpenInvoices,
   onOpenBookings,
-}: ViewProps) {
+}: ExploreViewProps) {
   const traveller = useTraveller();
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  /** The trip this search opened itself; re-rendering must not wipe the results. */
+  const openedTripId = useRef<string | null>(null);
   const [city, setCity] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [checkin, setCheckin] = useState("");
@@ -122,12 +136,20 @@ export default function HotelsView({
   const [error, setError] = useState<string | null>(null);
 
   // The trip answers the questions the traveller should not have to answer:
-  // where, when, and (when the destination names a country) which country.
+  // where, when, and (when the destination names a country) which country. With
+  // no trip yet the search still opens on usable defaults.
   useEffect(() => {
-    setCity(guessCity(trip.destination_summary));
-    setCountryCode(guessCountryCode(trip.destination_summary));
-    setCheckin(datePart(trip.start_at));
-    setCheckout(datePart(trip.end_at));
+    if (trip && openedTripId.current === trip.id) {
+      setActiveTripId(trip.id);
+      return;
+    }
+    const start = datePart(trip?.start_at ?? null) || dateFromToday(1);
+    const end = datePart(trip?.end_at ?? null) || dateFromToday(3);
+    setActiveTripId(trip?.id ?? null);
+    setCity(guessCity(trip?.destination_summary ?? null));
+    setCountryCode(guessCountryCode(trip?.destination_summary ?? null));
+    setCheckin(start);
+    setCheckout(end > start ? end : dateFromToday(2));
     setResult(null);
     setPrebook(null);
     setBooked(null);
@@ -149,6 +171,21 @@ export default function HotelsView({
     holderPhone.trim() ? null : "phone",
   ].filter((value): value is string => value !== null);
 
+  /** Hotels are booked into a trip; open one from the search when there is none. */
+  async function requireTrip(): Promise<string> {
+    if (activeTripId) return activeTripId;
+    const country = COUNTRIES.find((item) => item.code === countryCode);
+    const created = await onEnsureTrip({
+      name: `${city} stay`.slice(0, 160),
+      destination: (country ? `${city}, ${country.label}` : city).slice(0, 500),
+      startDate: checkin,
+      endDate: checkout,
+    });
+    openedTripId.current = created.id;
+    setActiveTripId(created.id);
+    return created.id;
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -157,8 +194,9 @@ export default function HotelsView({
     setBooked(null);
     setPrebookedOfferId(null);
     try {
+      const tripId = await requireTrip();
       setResult(
-        await searchHotels(trip.id, {
+        await searchHotels(tripId, {
           city,
           country_code: countryCode,
           checkin,
@@ -180,7 +218,8 @@ export default function HotelsView({
     setPrebookingOffer(offer.offer_id);
     setError(null);
     try {
-      setPrebook(await prebookHotel(trip.id, offer.offer_id));
+      const tripId = await requireTrip();
+      setPrebook(await prebookHotel(tripId, offer.offer_id));
       setPrebookedOfferId(offer.offer_id);
       setBooked(null);
     } catch (caught) {
@@ -195,9 +234,10 @@ export default function HotelsView({
     setBusy(true);
     setError(null);
     try {
-      await simulatePayment(trip.id, prebook.booking.id, "succeeded");
+      const tripId = await requireTrip();
+      await simulatePayment(tripId, prebook.booking.id, "succeeded");
       const bookingResult = await bookHotel(
-        trip.id,
+        tripId,
         prebook.provider_booking.id,
         {
           holder: {
@@ -450,7 +490,7 @@ export default function HotelsView({
                 bookingType="hotel"
               />
               <ProviderBookingActions
-                tripId={trip.id}
+                tripId={activeTripId ?? ""}
                 bookingType="hotel"
                 providerBookingId={booked.provider_booking.id}
                 canCancel={cancellableState(booked.provider_booking.state)}
