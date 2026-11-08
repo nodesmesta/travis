@@ -39,27 +39,6 @@ interface SendFailure {
   contextPointId: string | null;
 }
 
-function isoDateInZone(date: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-  return parts;
-}
-
-function longDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  if (!year || !month || !day) return isoDate;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, day)));
-}
-
 function freshnessLabel(
   response: AssistantResponse,
   timezone: string,
@@ -89,23 +68,13 @@ export default function AssistantPanel({
   const [selectedId, setSelectedId] = useState<string | null>(
     context?.id ?? null,
   );
-  const [date, setDate] = useState(
-    isoDateInZone(
-      trip.start_at ? new Date(trip.start_at) : new Date(),
-      trip.timezone,
-    ),
-  );
   const [notice, setNotice] = useState<string | null>(null);
-  const [routeFrom, setRouteFrom] = useState("");
-  const [routeTo, setRouteTo] = useState("");
   const [statusOverride, setStatusOverride] = useState<Record<string, string>>(
     {},
   );
   const logRef = useRef<HTMLDivElement | null>(null);
 
   const selectable = contexts.filter((point) => point.status === "active");
-  const selectedPoint =
-    selectable.find((point) => point.id === selectedId) ?? null;
 
   const confirmation = useConfirmation(trip.id, (outcome, done) => {
     setStatusOverride((current) => ({
@@ -237,20 +206,6 @@ export default function AssistantPanel({
     setNotice(null);
   }
 
-  const routable = selectable.filter(
-    (point) => point.resolution_status === "resolved",
-  );
-  const routeFromPoint = routable.find((point) => point.id === routeFrom);
-  const routeToPoint = routable.find((point) => point.id === routeTo);
-  const routeReady =
-    routeFromPoint !== undefined &&
-    routeToPoint !== undefined &&
-    routeFromPoint.id !== routeToPoint.id;
-
-  const lastAssistant = [...messages]
-    .reverse()
-    .find((message) => message.role === "assistant");
-
   return (
     <section
       className="panel asst-panel rail"
@@ -280,204 +235,6 @@ export default function AssistantPanel({
           </button>
         </div>
       </div>
-      <p className="helper-text">
-        Answers use your trip and live sources. The assistant never changes your
-        itinerary without your confirmation.
-      </p>
-
-      <fieldset className="asst-context">
-        <legend>Place to ask about</legend>
-        <div className="asst-context-options">
-          <label
-            className={`asst-chip${selectedId === null ? " selected" : ""}`}
-          >
-            <input
-              type="radio"
-              name="asst-context"
-              checked={selectedId === null}
-              onChange={() => chooseContext(null)}
-            />
-            Whole trip
-          </label>
-          {selectable.map((point) => {
-            const usable = point.resolution_status === "resolved";
-            return (
-              <label
-                key={point.id}
-                className={`asst-chip${selectedId === point.id ? " selected" : ""}${usable ? "" : " disabled"}`}
-              >
-                <input
-                  type="radio"
-                  name="asst-context"
-                  checked={selectedId === point.id}
-                  disabled={!usable}
-                  onChange={() => chooseContext(point.id)}
-                />
-                {point.label}
-                <small>
-                  {point.type}
-                  {usable ? "" : " · location not confirmed"}
-                </small>
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
-
-      <div className="asst-quick" role="group" aria-label="Quick actions">
-        <label className="asst-date">
-          Date
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending || !selectedPoint}
-          title={selectedPoint ? undefined : "Choose a place first"}
-          onClick={() =>
-            void submit(
-              `What events are happening near ${selectedPoint?.label ?? "this place"} on ${longDate(date)}?`,
-              selectedId,
-            )
-          }
-        >
-          Events near this place
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending || !selectedPoint}
-          title={selectedPoint ? undefined : "Choose a place first"}
-          onClick={() =>
-            void submit(
-              `What is the weather around ${selectedPoint?.label ?? "this place"}?`,
-              selectedId,
-            )
-          }
-        >
-          Weather here
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending || !selectedPoint}
-          title={selectedPoint ? undefined : "Choose a place first"}
-          onClick={() =>
-            void submit(
-              `Which restaurants are near ${selectedPoint?.label ?? "this place"}?`,
-              selectedId,
-            )
-          }
-        >
-          Restaurants nearby
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending || !selectedPoint}
-          title={selectedPoint ? undefined : "Choose a place first"}
-          onClick={() =>
-            void submit(
-              `What can I do near ${selectedPoint?.label ?? "this place"}?`,
-              selectedId,
-            )
-          }
-        >
-          Things to do nearby
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending}
-          onClick={() => void submit("Summarize my trip.", selectedId)}
-        >
-          Summarize my trip
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending}
-          onClick={() =>
-            void submit("What should I know about today?", selectedId)
-          }
-        >
-          Today&apos;s advice
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending}
-          onClick={() =>
-            void submit("Show my current recommendations.", selectedId)
-          }
-        >
-          My recommendations
-        </button>
-      </div>
-
-      <div className="asst-quick" role="group" aria-label="Route and traffic">
-        <label className="asst-date">
-          From
-          <select
-            value={routeFrom}
-            onChange={(event) => setRouteFrom(event.target.value)}
-          >
-            <option value="">Choose a place</option>
-            {routable.map((point) => (
-              <option key={point.id} value={point.id}>
-                {point.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="asst-date">
-          To
-          <select
-            value={routeTo}
-            onChange={(event) => setRouteTo(event.target.value)}
-          >
-            <option value="">Choose a place</option>
-            {routable.map((point) => (
-              <option key={point.id} value={point.id}>
-                {point.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending || !routeReady}
-          title={routeReady ? undefined : "Choose two different places"}
-          onClick={() =>
-            void submit(
-              `How do I get from ${routeFromPoint?.label} to ${routeToPoint?.label}?`,
-              null,
-            )
-          }
-        >
-          Compare routes
-        </button>
-        <button
-          type="button"
-          className="button secondary"
-          disabled={sending || !routeReady}
-          title={routeReady ? undefined : "Choose two different places"}
-          onClick={() =>
-            void submit(
-              `How is the traffic from ${routeFromPoint?.label} to ${routeToPoint?.label}?`,
-              null,
-            )
-          }
-        >
-          Traffic on this route
-        </button>
-      </div>
-
       {notice ? (
         <div className="status-banner success" role="status">
           {notice}
@@ -517,12 +274,8 @@ export default function AssistantPanel({
         ) : null}
         {!loading && !loadError && messages.length === 0 && !pendingText ? (
           <div className="empty-state">
-            <h3>Start with a question</h3>
-            <p>
-              For example: “What events are near the Jakarta Convention Center
-              on 12 November 2026?”, “How do I get from my hotel to the Jakarta
-              Convention Center?”, or “What is the weather around the venue?”
-            </p>
+            <h3>Ask about this trip</h3>
+            <p>Weather, routes, places, events, or your agenda.</p>
           </div>
         ) : null}
         {messages.map((message) => {
@@ -643,20 +396,6 @@ export default function AssistantPanel({
                       ))}
                     </ul>
                   ) : null}
-                  {response.travel_tips && response.travel_tips.length > 0 ? (
-                    <div className="asst-tips">
-                      <p className="asst-who">Travel tips</p>
-                      <ul>
-                        {response.travel_tips.map((tip) => (
-                          <li key={tip.title}>
-                            <strong>{tip.title}</strong>
-                            <br />
-                            {tip.detail}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
                   {response.confirmation_request ? (
                     <div className="asst-confirm-box">
                       <p>{response.confirmation_request.summary}</p>
@@ -688,26 +427,6 @@ export default function AssistantPanel({
                     sources={response.sources}
                     timezone={trip.timezone}
                   />
-                  {message.id === lastAssistant?.id &&
-                  response.follow_up_actions.length > 0 ? (
-                    <div
-                      className="asst-followups"
-                      role="group"
-                      aria-label="Suggested next questions"
-                    >
-                      {response.follow_up_actions.map((action) => (
-                        <button
-                          key={action.label}
-                          type="button"
-                          className="button ghost"
-                          disabled={sending}
-                          onClick={() => void submit(action.prompt, selectedId)}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </>
               ) : null}
             </div>
@@ -767,18 +486,13 @@ export default function AssistantPanel({
       ) : null}
 
       <form className="asst-form" onSubmit={onSubmit}>
-        <label htmlFor="asst-input">
-          Your question
-          {selectedPoint
-            ? ` (about ${selectedPoint.label})`
-            : " (about the whole trip)"}
-        </label>
+        <label htmlFor="asst-input">Message</label>
         <textarea
           id="asst-input"
           value={text}
           rows={2}
           maxLength={2000}
-          placeholder="Ask about routes, weather, traffic, nearby places, events, your agenda, recommendations, or today's travel tips"
+          placeholder="Ask about this trip…"
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
