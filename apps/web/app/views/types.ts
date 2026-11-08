@@ -40,7 +40,7 @@ export const VIEWS: Array<{ id: ViewId; label: string; hint: string }> = [
   {
     id: "explore",
     label: "Explore",
-    hint: "Discover stays, flights, events",
+    hint: "Stays and flights",
   },
   { id: "bookings", label: "Bookings", hint: "Your reservations" },
   { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
