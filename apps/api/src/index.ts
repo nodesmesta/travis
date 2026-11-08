@@ -1462,8 +1462,23 @@ async function handleRequest(
       journeyTripId,
       user.id,
     );
+    // The traveller reads places, not ids: name both ends of every leg.
+    const points = await repository.listContextPointsForTrip(
+      journeyTripId,
+      user.id,
+    );
+    const labelOf = new Map(
+      points.map((point) => [
+        point.id,
+        point.label,
+      ]),
+    );
     writeJson(response, 200, {
-      items: items.map(serializedJourneyLeg),
+      items: items.map((item) => ({
+        ...serializedJourneyLeg(item),
+        origin_label: labelOf.get(item.origin_context_point_id) ?? null,
+        destination_label: labelOf.get(item.destination_context_point_id) ?? null,
+      })),
       request_id: requestId,
     });
     return;

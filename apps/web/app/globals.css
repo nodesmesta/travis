@@ -3881,3 +3881,121 @@ body {
   border-radius: 10px;
   font-size: 12px;
 }
+
+/* ---------- Trips: the plan and the advice for it ---------- */
+
+.plan-detail {
+  margin-top: 6px;
+}
+
+.plan-segments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-segments li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fafbff;
+}
+
+.plan-segment-route {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plan-hotel {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 8px;
+}
+
+.plan-hotel-photo {
+  width: 92px;
+  height: 68px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.plan-hotel-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.advice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.advice-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--indigo);
+  border-radius: 12px;
+  background: white;
+}
+
+.advice-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.advice-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.advice-load {
+  align-self: flex-start;
+}
+
+.advice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 44px;
+}
+
+.advice-advise {
+  margin: 0;
+  color: var(--indigo-dark);
+  font-size: 13px;
+}
+
+.advice-route {
+  margin: 0;
+  font-size: 13px;
+}
+
+.advice-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--muted, #55606f);
+}

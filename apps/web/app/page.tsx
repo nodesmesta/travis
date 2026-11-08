@@ -8,7 +8,6 @@ import InvoicesView from "./views/invoices";
 import ItineraryView from "./views/itinerary";
 import FlightsView from "./views/flights";
 import HotelsView from "./views/hotels";
-import MobilityView from "./views/mobility";
 import TripsView from "./views/trips";
 import {
   VIEWS,
@@ -322,7 +321,6 @@ function ViewHost({
   return (
     <>
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {view === "mobility" ? <MobilityView {...viewProps} /> : null}
       {view === "assistant" ? <AssistantView {...viewProps} /> : null}
       {view === "itinerary" ? <ItineraryView {...viewProps} /> : null}
       {view === "bookings" ? <BookingsView {...viewProps} /> : null}

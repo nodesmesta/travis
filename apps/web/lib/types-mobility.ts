@@ -6,6 +6,9 @@ export type MobilityFreshness = "fresh" | "expired";
 
 export interface JourneyLeg {
   id: string;
+  /** Named ends of the leg, so the plan reads as places instead of ids. */
+  origin_label?: string | null;
+  destination_label?: string | null;
   trip_id: string;
   origin_context_point_id: string;
   destination_context_point_id: string;

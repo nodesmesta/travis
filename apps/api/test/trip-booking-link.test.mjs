@@ -64,6 +64,7 @@ class FakeRepo {
     };
     this.agenda = [];
     this.points = [];
+    this.legs = [];
   }
 
   async getTrip(tripId) {
@@ -109,6 +110,30 @@ class FakeRepo {
 
   async updateAgendaItem(id, tripId, patch) {
     const row = this.agenda.find((item) => item.id === id);
+    Object.assign(row, patch);
+    return row;
+  }
+
+  async listContextPoints() {
+    return this.points;
+  }
+
+  async listAgenda() {
+    return [...this.agenda];
+  }
+
+  async listJourneyLegs() {
+    return this.legs;
+  }
+
+  async createJourneyLeg(input) {
+    const row = { id: `leg-${this.legs.length + 1}`, status: "planned", ...input };
+    this.legs.push(row);
+    return row;
+  }
+
+  async updateJourneyLeg(id, tripId, patch) {
+    const row = this.legs.find((leg) => leg.id === id);
     Object.assign(row, patch);
     return row;
   }
@@ -279,4 +304,105 @@ test("booking the same hotel twice reuses one location", async () => {
 
   assert.equal(repo.points.length, 1, "one location for one hotel");
   assert.equal(repo.agenda.length, 2, "two stays, two agenda items");
+});
+
+test("a flight and a stay plan the airport transfers without asking", async () => {
+  const repo = new FakeRepo();
+  const places = {
+    async hotel() {
+      return {
+        type: "hotel",
+        label: "Hotel Fixture",
+        address: null,
+        latitude: -6.2,
+        longitude: 106.8,
+        externalPlaceId: "lp123",
+      };
+    },
+    async airport(iata) {
+      const coords = { CGK: [-6.125, 106.655], SUB: [-7.38, 112.787] };
+      const found = coords[iata];
+      if (!found) return null;
+      return {
+        type: "airport",
+        label: `${iata} airport`,
+        address: null,
+        latitude: found[0],
+        longitude: found[1],
+        externalPlaceId: iata,
+      };
+    },
+  };
+  const service = new LiteApiBookingService(repo, hotelClient(), places);
+
+  await service.bookHotel({
+    userId: USER,
+    tripId: TRIP,
+    providerBookingId: ATTEMPT,
+    holder: { first_name: "Ayu", last_name: "Fixture", email: "ayu@example.com", phone: "+628123456789" },
+    guests: [{ first_name: "Ayu", last_name: "Fixture", email: "ayu@example.com" }],
+  });
+
+  repo.providerBooking = {
+    ...repo.providerBooking,
+    id: "flight-attempt",
+    booking_type: "flight",
+    state: "prebooked",
+    checkin: null,
+    checkout: null,
+    metadata: {
+      schedule: {
+        segments: [
+          {
+            origin_code: "CGK",
+            origin_name: null,
+            destination_code: "SUB",
+            destination_name: null,
+            departs_at: "2026-11-11T08:00",
+            arrives_at: "2026-11-11T09:25",
+            carrier_name: "Garuda",
+            flight_number: "GA123",
+          },
+        ],
+      },
+    },
+  };
+  const flightClient = {
+    async bookFlight() {
+      return {
+        booking_id: "FL-1",
+        booking_reference: "QK7X2",
+        state: "confirmed",
+        provider_status: "CONFIRMED",
+        total: { amount: 120, currency: "USD" },
+        ticket_deadline: null,
+        passengers: [],
+      };
+    },
+  };
+  const flightService = new LiteApiBookingService(repo, flightClient, places);
+
+  await flightService.bookFlight({
+    userId: USER,
+    tripId: TRIP,
+    providerBookingId: "flight-attempt",
+  });
+
+  assert.equal(repo.agenda.length, 2, "the stay and the flight are both on the trip");
+  assert.equal(repo.legs.length, 2, "there and back are planned");
+  const hotelPoint = repo.points.find((point) => point.type === "hotel");
+  const arrivalLeg = repo.legs.find((leg) => leg.destination_context_point_id === hotelPoint.id);
+  const departureLeg = repo.legs.find((leg) => leg.origin_context_point_id === hotelPoint.id);
+  assert.ok(arrivalLeg, "the airport to the hotel leg exists");
+  assert.ok(departureLeg, "the hotel back to the airport leg exists");
+  assert.equal(
+    Date.parse(arrivalLeg.departure_at),
+    Date.parse("2026-11-11T09:25:00+07:00") + 60 * 60_000,
+    "lands, then an hour to leave the airport",
+  );
+  assert.equal(
+    Date.parse(departureLeg.departure_at),
+    Date.parse("2026-11-11T08:00:00+07:00") - 180 * 60_000,
+    "leaves three hours before the flight",
+  );
 });
