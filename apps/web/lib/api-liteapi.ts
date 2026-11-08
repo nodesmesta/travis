@@ -193,7 +193,11 @@ export interface FlightOffer {
   carry_on_included: boolean;
   checked_bag_included: boolean;
   terms: FlightFareTerms | null;
-  baggage: { cabin: FlightBaggage | null; checked: FlightBaggage | null };
+  baggage: {
+    cabin: FlightBaggage | null;
+    checked: FlightBaggage | null;
+    paid_checked: FlightBaggage | null;
+  };
 }
 export interface FlightJourney {
   journey_key: string;
@@ -273,6 +277,58 @@ export interface FlightPrebookAttempt extends ProviderAttemptResponse {
 export interface ProviderActionResponse extends ProviderAttemptResponse {
   provider?: unknown;
   payment?: PaymentResult["payment"];
+}
+
+/** One airport the flight search accepts, as the provider describes it. */
+export interface Airport {
+  iata: string;
+  icao: string | null;
+  name: string;
+  city: string;
+  country: string;
+  state: string | null;
+  lat: number | null;
+  lon: number | null;
+  timezone: string | null;
+  has_airline_service: boolean;
+  /** Only present on the "near you" answer. */
+  distance_km?: number;
+}
+
+/** The airports of a country, or the ones matching a typed city, name or code. */
+export function listAirports(params: {
+  country?: string;
+  q?: string;
+}): Promise<{ airports: Airport[]; total: number; request_id: string }> {
+  const parts = [
+    params.country ? `country=${encodeURIComponent(params.country)}` : "",
+    params.q ? `q=${encodeURIComponent(params.q)}` : "",
+  ].filter((part) => part.length > 0);
+  return request(`/places/airports?${parts.join("&")}`) as Promise<{
+    airports: Airport[];
+    total: number;
+    request_id: string;
+  }>;
+}
+
+/** The airports closest to a coordinate, resolved through the server. */
+export function nearbyAirports(
+  lat: number,
+  lon: number,
+): Promise<{
+  city: string | null;
+  country: string | null;
+  label: string | null;
+  airports: Airport[];
+  request_id: string;
+}> {
+  return request(`/places/airports/nearby?lat=${lat}&lon=${lon}`) as Promise<{
+    city: string | null;
+    country: string | null;
+    label: string | null;
+    airports: Airport[];
+    request_id: string;
+  }>;
 }
 
 function trip(tripId: string): string {

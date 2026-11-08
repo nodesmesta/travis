@@ -13,12 +13,16 @@ import {
   bookFlight,
   getFlightBooking,
   prebookFlight,
+  listCountries,
+  nearbyAirports,
   searchFlights,
   type FlightBaggage,
   type FlightJourney,
   type FlightOffer,
   type FlightPrebookAttempt,
+  type FlightSegment,
   type FlightSeat,
+  type Airport,
   type FlightSearchResponse,
   type ProviderActionResponse,
 } from "../../lib/api-liteapi";
@@ -29,9 +33,10 @@ import {
   providerStateLabel,
   providerStateTone,
 } from "./provider-booking-parts";
-import { CURRENCIES } from "./places-options";
+import { COUNTRIES, CURRENCIES } from "./places-options";
 import { DatePopover } from "./date-popover";
 import { SearchField } from "./search-fields";
+import { AirportPicker } from "./airport-picker";
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
 
@@ -134,6 +139,23 @@ function baggageText(bag: FlightBaggage | null): string | null {
   return `${bag.description ?? "Bag"}: ${parts.join(" ")}`;
 }
 
+/** The airport the traveller waits in, and for how long. */
+function layoverText(
+  previous: FlightSegment,
+  next: FlightSegment,
+): string {
+  const waitMinutes = Math.round(
+    (Date.parse(next.departs_local) - Date.parse(previous.arrives_local)) / 60000,
+  );
+  const wait =
+    waitMinutes > 0
+      ? `${Math.floor(waitMinutes / 60)}h ${waitMinutes % 60}m`
+      : "same day";
+  return `${wait} at ${next.origin_name ?? next.origin_code} · ${
+    next.origin_code
+  }`;
+}
+
 function seatHint(offer: FlightOffer): string | null {
   if (offer.seats_remaining === null) return null;
   if (offer.seats_remaining <= 0) return "Sold out at this fare";
@@ -192,12 +214,23 @@ export function FlightDetail({
             </p>
           ) : null}
           <ol className="segment-timeline">
-            {journey.segments.map((segment) => (
+            {journey.segments.map((segment, position) => (
               <li key={`${segment.flight_number}-${segment.departs_local}`}>
+                {position > 0 ? (
+                  <span className="segment-layover">
+                    {layoverText(
+                      journey.segments[position - 1] as FlightSegment,
+                      segment,
+                    )}
+                  </span>
+                ) : null}
                 <strong>
                   {segment.departs_local} {segment.origin_code}
                 </strong>
-                <span>
+                <span className="segment-carrier">
+                  {segment.carrier_logo ? (
+                    <img alt="" className="carrier-logo" src={segment.carrier_logo} />
+                  ) : null}
                   {segment.carrier_name} {segment.flight_number} ·{" "}
                   {Math.floor(segment.duration_minutes / 60)}h{" "}
                   {segment.duration_minutes % 60}m
@@ -269,8 +302,17 @@ export function FlightDetail({
                     {baggageText(offer.baggage.checked) ? (
                       <li>{baggageText(offer.baggage.checked)}</li>
                     ) : (
-                      <li>No checked bag in this fare</li>
+                      <li>No checked bag included</li>
                     )}
+                    {offer.baggage.paid_checked?.price ? (
+                      <li>
+                        Checked bag add-on:{" "}
+                        {money(offer.baggage.paid_checked.price)}
+                        {offer.baggage.paid_checked.weight_kg !== null
+                          ? ` · up to ${offer.baggage.paid_checked.weight_kg} kg`
+                          : ""}
+                      </li>
+                    ) : null}
                     {(offer.terms?.messages ?? []).map((message) => (
                       <li key={message}>{message}</li>
                     ))}
@@ -394,8 +436,14 @@ export default function FlightsView({
   const [activeTripId, setActiveTripId] = useState<string | null>(null);
   /** The trip this search opened itself; re-rendering must not wipe the results. */
   const openedTripId = useRef<string | null>(null);
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
+  const [origin, setOrigin] = useState<Airport | null>(null);
+  const [destination, setDestination] = useState<Airport | null>(null);
+  const [destCountry, setDestCountry] = useState("");
+  const [countries, setCountries] = useState<Array<{ code: string; name: string }>>(
+    COUNTRIES.map((country) => ({ code: country.code, name: country.label })),
+  );
+  const [nearby, setNearby] = useState<Airport[]>([]);
+  const [nearbyNote, setNearbyNote] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [result, setResult] = useState<FlightSearchResponse | null>(null);
   const [selected, setSelected] = useState<FlightJourney | null>(null);
@@ -424,6 +472,61 @@ export default function FlightsView({
     destination?: string;
     date?: string;
   }>({});
+  const located = useRef(false);
+
+  // The provider owns the country list; the bundled one is the fallback.
+  useEffect(() => {
+    let cancelled = false;
+    listCountries()
+      .then((result) => {
+        if (cancelled || result.countries.length === 0) return;
+        setCountries(
+          result.countries.map((country) => ({
+            code: country.code,
+            name: country.name,
+          })),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * The traveller's own position decides the default airport. The browser asks
+   * once; a refusal leaves the field empty rather than guessing a city.
+   */
+  useEffect(() => {
+    if (located.current) return;
+    located.current = true;
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setNearbyNote("Location is not available in this browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        nearbyAirports(position.coords.latitude, position.coords.longitude)
+          .then((result) => {
+            setNearby(result.airports);
+            const closest = result.airports[0];
+            if (closest) {
+              setOrigin((current) => current ?? closest);
+            }
+            setNearbyNote(
+              result.airports.length === 0
+                ? `No airport found near ${result.city ?? "your location"}.`
+                : result.city
+                  ? `Near ${result.city}${result.country ? `, ${result.country}` : ""}`
+                  : null,
+            );
+          })
+          .catch(() => setNearbyNote("Your nearest airport could not be looked up."));
+      },
+      () => setNearbyNote("Location permission was declined — pick your airport."),
+      { timeout: 8000, maximumAge: 600000 },
+    );
+  }, []);
 
   useEffect(() => {
     if (trip && openedTripId.current === trip.id) {
@@ -431,8 +534,8 @@ export default function FlightsView({
       return;
     }
     setActiveTripId(trip?.id ?? null);
-    setOrigin("");
-    setDestination("");
+    setOrigin(null);
+    setDestination(null);
     setDate(datePart(trip?.start_at ?? null) || dateFromToday(7));
     setResult(null);
     setSelected(null);
@@ -467,9 +570,12 @@ export default function FlightsView({
   /** Flights are ticketed into a trip; open one from the route when there is none. */
   async function requireTrip(): Promise<string> {
     if (activeTripId) return activeTripId;
+    const routeLabel = `${origin?.city ?? origin?.iata ?? "?"} → ${
+      destination?.city ?? destination?.iata ?? "?"
+    }`;
     const created = await onEnsureTrip({
-      name: `${origin} → ${destination} flight`.slice(0, 160),
-      destination: `${origin} → ${destination}`.slice(0, 500),
+      name: `${routeLabel} flight`.slice(0, 160),
+      destination: routeLabel.slice(0, 500),
       startDate: date,
       endDate: date,
     });
@@ -481,14 +587,14 @@ export default function FlightsView({
   function swapAirports() {
     setOrigin(destination);
     setDestination(origin);
+    setDestCountry(origin?.country ?? destCountry);
   }
 
   function validate(): boolean {
     const next: { origin?: string; destination?: string; date?: string } = {};
-    if (origin.trim().length !== 3) next.origin = "Three-letter airport code.";
-    if (destination.trim().length !== 3)
-      next.destination = "Three-letter airport code.";
-    if (origin && origin === destination)
+    if (!origin) next.origin = "Choose the airport you fly from.";
+    if (!destination) next.destination = "Choose the country, then the airport.";
+    if (origin && destination && origin.iata === destination.iata)
       next.destination = "Origin and destination are the same.";
     if (!date) next.date = "Choose a departure date.";
     setErrors(next);
@@ -510,8 +616,8 @@ export default function FlightsView({
       const tripId = await requireTrip();
       setResult(
         await searchFlights(tripId, {
-          origin,
-          destination,
+          origin: origin?.iata ?? "",
+          destination: destination?.iata ?? "",
           date,
           adults: 1,
           currency,
@@ -660,12 +766,20 @@ export default function FlightsView({
           Search flights
         </h2>
         <form className="search-bar flights" onSubmit={search} noValidate>
-          <SearchField className="grow" error={errors.origin} icon="✈" label="From">
-            <input
-              autoComplete="off"
-              maxLength={3}
-              onChange={(event) => setOrigin(event.target.value.toUpperCase())}
-              placeholder="CGK"
+          <SearchField
+            className="grow"
+            error={errors.origin}
+            hint={nearbyNote ?? undefined}
+            icon="✈"
+            label="From"
+            plain
+          >
+            <AirportPicker
+              error={null}
+              nearby={nearby}
+              onChange={setOrigin}
+              onClear={() => setOrigin(null)}
+              placeholder={nearbyNote ? "Type a city or code" : "City or airport code"}
               value={origin}
             />
           </SearchField>
@@ -677,16 +791,47 @@ export default function FlightsView({
           >
             ⇄
           </button>
-          <SearchField className="grow" error={errors.destination} icon="✈" label="To">
-            <input
-              autoComplete="off"
-              maxLength={3}
-              onChange={(event) =>
-                setDestination(event.target.value.toUpperCase())
-              }
-              placeholder="SIN"
-              value={destination}
-            />
+          <SearchField
+            className="grow"
+            error={errors.destination}
+            icon="✈"
+            label="To"
+            plain
+          >
+            <div className="dest-picker">
+              <select
+                aria-label="Destination country"
+                className="country-select"
+                onChange={(event) => {
+                  setDestCountry(event.target.value);
+                  setDestination(null);
+                }}
+                value={destCountry}
+              >
+                <option value="">Choose a country</option>
+                {countries.map((country) => (
+                  <option key={country.code} value={country.code}>
+                    {country.name}
+                  </option>
+                ))}
+              </select>
+              <AirportPicker
+                country={destCountry || undefined}
+                countryName={
+                  countries.find((country) => country.code === destCountry)?.name
+                }
+                disabled={!destCountry}
+                error={null}
+                onChange={setDestination}
+                onClear={() => setDestination(null)}
+                placeholder={
+                  destCountry
+                    ? "City or airport in this country"
+                    : "Pick the country first"
+                }
+                value={destination}
+              />
+            </div>
           </SearchField>
           <SearchField
             error={errors.date}
@@ -718,7 +863,10 @@ export default function FlightsView({
         <div className="search-foot">
           <span className="search-chips">
             <span>
-              {origin || "From"} → {destination || "To"}
+              {origin ? `${origin.iata} ${origin.city || origin.name}` : "From"} →{" "}
+              {destination
+                ? `${destination.iata} ${destination.city || destination.name}`
+                : "To"}
             </span>
             {date ? <span>{date}</span> : null}
             <span>1 adult</span>

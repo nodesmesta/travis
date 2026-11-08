@@ -1,344 +1,290 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { listAgendaItems, listJourneyLegs } from "../../lib/api-assistant";
-import {
-  createTrip,
-  describeTripError,
-  transitionTrip,
-  updateTrip,
-  type DescribedError,
-} from "../../lib/api-trips";
-import { tripChanges } from "../../lib/trips-form";
-import type { Trip } from "../../lib/types";
-import type {
-  AgendaItemView,
-  CreateTripBody,
-  JourneyLegView,
-} from "../../lib/types-trips";
-import {
-  AgendaPanel,
-  ContextPointsPanel,
-  JourneyLegPanel,
-  TimelineSummary,
-} from "./trips-detail";
-import {
-  ConfirmDialog,
-  ErrorNote,
-  TimeZoneOptions,
-  TripForm,
-  TripList,
-  browserTimeZone,
-  statusLabel,
-  useIdempotencyKey,
-} from "./trips-parts";
+import { useEffect, useState } from "react";
+import { listAgendaItems } from "../../lib/api-assistant";
+import { listTripBookings } from "../../lib/api-invoices";
+import { formatInZone } from "../../lib/trips-time";
+import type { Booking } from "../../lib/types";
+import type { AgendaItemView } from "../../lib/types-trips";
+import { statusLabel } from "./trips-parts";
 import type { TripsViewProps } from "./types";
 
-interface PendingTransition {
-  trip: Trip;
-  target: "confirmed" | "active" | "completed";
-  action: string;
+/**
+ * Trips are written by the tickets themselves: a paid hotel or flight booking
+ * adds its agenda item to the trip it belongs to. This page only reads that, so
+ * there is no form to fill in and nothing to confirm.
+ */
+
+const TYPE_LABEL: Record<string, string> = {
+  hotel_check_in: "Stay",
+  hotel_check_out: "Check-out",
+  flight: "Flight",
+  event: "Event",
+  transport: "Transfer",
+};
+
+function typeIcon(type: string): string {
+  if (type.startsWith("hotel")) return "🛏";
+  if (type === "flight") return "✈";
+  if (type === "event") return "🎟";
+  return "◈";
 }
 
-interface Lists {
-  agenda: AgendaItemView[];
-  legs: JourneyLegView[];
-  loading: boolean;
-  error: DescribedError | null;
+function metaString(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-/** Trip setup (6.3): create and edit trips, move them forward, and fill the open trip with places, agenda items, and journey legs. */
+function metaNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = metadata[key];
+  return typeof value === "number" ? value : null;
+}
+
+function money(amount: number | null, currency: string | null): string | null {
+  if (amount === null || !currency) return null;
+  return `${currency} ${amount.toFixed(2)}`;
+}
+
 export default function TripsView({
   trip,
   trips: allTrips,
-  contexts,
   onSelectTrip,
-  onTripsChanged,
-  onContextsChanged,
+  onOpenBookings,
 }: TripsViewProps) {
   const trips = allTrips ?? (trip ? [trip] : []);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [pageError, setPageError] = useState<DescribedError | null>(null);
-  const [createError, setCreateError] = useState<DescribedError | null>(null);
-  const [editError, setEditError] = useState<DescribedError | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingTransition | null>(null);
-  const [transitionError, setTransitionError] = useState<DescribedError | null>(
-    null,
-  );
-  const [lists, setLists] = useState<Lists>({
-    agenda: [],
-    legs: [],
-    loading: false,
-    error: null,
-  });
-  const createKey = useIdempotencyKey("trip-create");
-  const transitionKey = useIdempotencyKey("trip-transition");
-  const defaultTimezone = useRef(browserTimeZone());
-  const tripId = trip?.id ?? null;
-
-  const loadLists = useCallback(async (id: string): Promise<Lists> => {
-    const [agenda, legs] = await Promise.allSettled([
-      listAgendaItems(id),
-      listJourneyLegs(id),
-    ]);
-    const failure =
-      agenda.status === "rejected"
-        ? agenda.reason
-        : legs.status === "rejected"
-          ? legs.reason
-          : null;
-    return {
-      agenda: agenda.status === "fulfilled" ? agenda.value.items : [],
-      legs: legs.status === "fulfilled" ? legs.value.items : [],
-      loading: false,
-      error: failure === null ? null : describeTripError(failure),
-    };
-  }, []);
+  const [agenda, setAgenda] = useState<AgendaItemView[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tripId) {
-      setLists({ agenda: [], legs: [], loading: false, error: null });
+    if (!trip) {
+      setAgenda([]);
+      setBookings([]);
+      setError(null);
       return;
     }
     let current = true;
-    setLists((existing) => ({ ...existing, loading: true }));
-    void loadLists(tripId).then((result) => {
-      if (current) setLists(result);
-    });
+    setLoading(true);
+    setError(null);
+    Promise.allSettled([listAgendaItems(trip.id), listTripBookings(trip.id)])
+      .then(([agendaResult, bookingResult]) => {
+        if (!current) return;
+        if (agendaResult.status === "fulfilled") {
+          setAgenda(agendaResult.value.items);
+        }
+        if (bookingResult.status === "fulfilled") {
+          setBookings(bookingResult.value.items);
+        }
+        if (
+          agendaResult.status === "rejected" &&
+          bookingResult.status === "rejected"
+        ) {
+          setError("This trip could not be loaded. Refresh to try again.");
+        }
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
     return () => {
       current = false;
     };
-  }, [tripId, loadLists]);
+  }, [trip]);
 
-  const reloadLists = useCallback(async () => {
-    if (!tripId) return;
-    setLists(await loadLists(tripId));
-  }, [tripId, loadLists]);
-
-  async function refreshTrips(selectTripId?: string) {
-    try {
-      await onTripsChanged?.(selectTripId);
-      setPageError(null);
-    } catch (caught) {
-      setPageError(describeTripError(caught));
-    }
-  }
-
-  async function handleCreate(body: CreateTripBody): Promise<boolean> {
-    setBusy(true);
-    setCreateError(null);
-    setNotice(null);
-    try {
-      const created = await createTrip(body, createKey.keyFor(body));
-      createKey.done();
-      setNotice(
-        `Trip “${created.name}” was created as a draft and is now open in the workspace.`,
-      );
-      await refreshTrips(created.id);
-      return true;
-    } catch (caught) {
-      setCreateError(describeTripError(caught));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleEdit(
-    original: Trip,
-    body: CreateTripBody,
-  ): Promise<boolean> {
-    const changes = tripChanges(original, body);
-    if (Object.keys(changes).length === 0) {
-      setEditError({
-        message: "Nothing has changed yet. Edit a field, then save.",
-        code: "NO_CHANGES",
-      });
-      return false;
-    }
-    setBusy(true);
-    setEditError(null);
-    setNotice(null);
-    try {
-      const updated = await updateTrip(original.id, changes);
-      setNotice(`Trip “${updated.name}” was updated.`);
-      setEditingId(null);
-      await refreshTrips();
-      return true;
-    } catch (caught) {
-      setEditError(describeTripError(caught));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleTransition() {
-    if (!pending) return;
-    setBusy(true);
-    setTransitionError(null);
-    try {
-      const updated = await transitionTrip(
-        pending.trip.id,
-        pending.target,
-        transitionKey.keyFor({ id: pending.trip.id, target: pending.target }),
-      );
-      transitionKey.done();
-      setNotice(
-        `Trip “${updated.name}” is now ${statusLabel(updated.status)}.`,
-      );
-      setPending(null);
-      await refreshTrips();
-    } catch (caught) {
-      setTransitionError(describeTripError(caught));
-      // The trip may have changed elsewhere (for example in another tab), so show its real status.
-      void refreshTrips();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function openTrip(id: string) {
-    const target = trips.find((item) => item.id === id);
-    onSelectTrip?.(id);
-    if (target) setNotice(`“${target.name}” is now open in the workspace.`);
-  }
+  const sorted = [...agenda].sort(
+    (left, right) => Date.parse(left.start_at) - Date.parse(right.start_at),
+  );
+  const timezone = trip?.timezone ?? "UTC";
+  const days =
+    trip === null
+      ? []
+      : [...new Set(sorted.map((item) => formatInZone(item.start_at, timezone).slice(0, 10)))];
 
   return (
     <section className="panel trp-view" aria-labelledby="trips-title">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">TRIP SETUP</p>
-          <h2 id="trips-title">Your trips</h2>
+          <p className="eyebrow">YOUR TRIPS</p>
+          <h2 id="trips-title">Trips</h2>
         </div>
         <span className="count-badge" aria-label={`${trips.length} trips`}>
           {trips.length}
         </span>
       </div>
       <p className="helper-text">
-        Create a trip, then add its places, agenda, and journey legs. The trip
-        you open here is the one the other views use.
+        A trip gathers the tickets you booked. Book a stay or a flight and it
+        appears here on its own — nothing to confirm, nothing to fill in.
       </p>
 
-      <div role="status" aria-live="polite" aria-atomic="true">
-        {notice ? (
-          <div className="status-banner success trp-notice">{notice}</div>
-        ) : null}
-      </div>
-      <ErrorNote error={pageError} title="The trips could not be refreshed" />
-
-      <div className="trp-grid">
-        <section className="trp-card" aria-labelledby="trp-create-heading">
-          <h3 id="trp-create-heading">Create a trip</h3>
-          <TripForm
-            idPrefix="trp-create"
-            defaultTimezone={defaultTimezone.current}
-            busy={busy}
-            error={createError}
-            submitLabel="Create trip"
-            onSubmit={handleCreate}
-          />
-        </section>
-        <section className="trp-card" aria-labelledby="trp-list-heading">
-          <h3 id="trp-list-heading">Trips</h3>
-          <TripList
-            trips={trips}
-            activeId={tripId}
-            busy={busy}
-            editingId={editingId}
-            onOpen={openTrip}
-            onEdit={(id) => {
-              setEditError(null);
-              setEditingId(id);
-            }}
-            onTransition={(item, target, action) => {
-              setTransitionError(null);
-              setPending({ trip: item, target, action });
-            }}
-            renderEditor={(item) => (
-              <TripForm
-                idPrefix={`trp-edit-${item.id}`}
-                trip={item}
-                defaultTimezone={item.timezone}
-                busy={busy}
-                error={editError}
-                submitLabel="Save changes"
-                onSubmit={(body) => handleEdit(item, body)}
-                onCancel={() => setEditingId(null)}
-              />
-            )}
-          />
-        </section>
-      </div>
-
-      <TimeZoneOptions />
+      {trips.length === 0 ? (
+        <div className="empty-state">
+          <h3>No trip yet</h3>
+          <p>
+            Search a hotel or a flight, complete the sandbox payment, and the trip
+            appears here with its first ticket.
+          </p>
+        </div>
+      ) : (
+        <div className="trip-cards">
+          {trips.map((item) => {
+            const active = item.id === trip?.id;
+            return (
+              <button
+                className={`trip-card ${active ? "active" : ""}`}
+                key={item.id}
+                onClick={() => onSelectTrip?.(item.id)}
+                type="button"
+              >
+                <span className="trip-card-top">
+                  <strong>{item.name}</strong>
+                  <span
+                    className={`tag ${item.status === "active" ? "sage" : "indigo"}`}
+                  >
+                    {statusLabel(item.status)}
+                  </span>
+                </span>
+                <span className="event-meta">
+                  {item.destination_summary ?? "Destination not set"}
+                </span>
+                <span className="event-meta">
+                  {item.start_at ? item.start_at.slice(0, 10) : "—"} →{" "}
+                  {item.end_at ? item.end_at.slice(0, 10) : "—"} · {item.timezone}
+                </span>
+                <span className="trip-card-open">
+                  {active ? "Open now" : "Open this trip"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {trip ? (
         <div className="trp-detail" key={trip.id}>
           <div className="section-heading">
             <div>
               <p className="eyebrow">
-                OPEN TRIP · {statusLabel(trip.status).toUpperCase()}
+                {statusLabel(trip.status).toUpperCase()} · {trip.timezone}
               </p>
-              <h2>Plan “{trip.name}”</h2>
+              <h2>{trip.name}</h2>
+              <p className="event-meta">
+                {trip.destination_summary ?? "Destination not set"} ·{" "}
+                {trip.start_at ? trip.start_at.slice(0, 10) : "—"} →{" "}
+                {trip.end_at ? trip.end_at.slice(0, 10) : "—"}
+              </p>
             </div>
+            {onOpenBookings ? (
+              <button
+                className="button ghost"
+                onClick={onOpenBookings}
+                type="button"
+              >
+                All bookings
+              </button>
+            ) : null}
           </div>
-          <div className="trp-grid">
-            <ContextPointsPanel
-              trip={trip}
-              contexts={contexts}
-              onNotice={setNotice}
-              onChanged={async () => {
-                await onContextsChanged?.();
-              }}
-            />
-            <TimelineSummary
-              trip={trip}
-              contexts={contexts}
-              agenda={lists.agenda}
-              legs={lists.legs}
-              loading={lists.loading}
-              error={lists.error}
-            />
-            <AgendaPanel
-              trip={trip}
-              contexts={contexts}
-              onNotice={setNotice}
-              onChanged={reloadLists}
-            />
-            <JourneyLegPanel
-              trip={trip}
-              contexts={contexts}
-              onNotice={setNotice}
-              onChanged={reloadLists}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="empty-state">
-          <h3>No trip is open</h3>
-          <p>Create a trip above to add places, an agenda, and journey legs.</p>
-        </div>
-      )}
 
-      {pending ? (
-        <ConfirmDialog
-          title={`${pending.action}: “${pending.trip.name}”?`}
-          body={
-            <p>
-              The status changes from {statusLabel(pending.trip.status)} to{" "}
-              {statusLabel(pending.target)}. A trip only moves forward, so this
-              cannot be undone.
+          {error ? (
+            <p className="field-error" role="status">
+              {error}
             </p>
-          }
-          confirmLabel={pending.action}
-          busy={busy}
-          error={transitionError}
-          onConfirm={() => void handleTransition()}
-          onCancel={() => setPending(null)}
-        />
+          ) : null}
+          {loading ? (
+            <p className="helper-text" role="status">
+              Loading this trip…
+            </p>
+          ) : null}
+
+          {!loading && sorted.length === 0 ? (
+            <div className="empty-state">
+              <h3>Nothing booked on this trip yet</h3>
+              <p>
+                Its tickets appear here as soon as a booking on this trip
+                succeeds.
+              </p>
+            </div>
+          ) : null}
+
+          {days.map((day) => (
+            <section className="plan-day" key={day}>
+              <p className="eyebrow">{day}</p>
+              <ol className="plan-list">
+                {sorted
+                  .filter(
+                    (item) =>
+                      formatInZone(item.start_at, timezone).slice(0, 10) === day,
+                  )
+                  .map((item) => {
+                    const confirmation = metaString(
+                      item.metadata,
+                      "confirmation_code",
+                    );
+                    const total = metaNumber(item.metadata, "total");
+                    const currency = metaString(item.metadata, "currency");
+                    const provider = metaString(item.metadata, "provider");
+                    const cancelled = item.status === "cancelled";
+                    return (
+                      <li
+                        className={`plan-row ${cancelled ? "cancelled" : ""}`}
+                        key={item.id}
+                      >
+                        <span className="plan-icon" aria-hidden="true">
+                          {typeIcon(item.type)}
+                        </span>
+                        <div className="plan-body">
+                          <div className="result-title">
+                            <strong>{item.title}</strong>
+                            <span className="tag indigo">
+                              {TYPE_LABEL[item.type] ?? item.type}
+                            </span>
+                            {cancelled ? (
+                              <span className="tag coral">Cancelled</span>
+                            ) : null}
+                          </div>
+                          <span className="event-meta">
+                            {formatInZone(item.start_at, timezone)} →{" "}
+                            {formatInZone(item.end_at, timezone)}
+                          </span>
+                          <span className="event-meta">
+                            {confirmation
+                              ? `Confirmation ${confirmation}`
+                              : "Confirmation pending"}
+                            {provider ? ` · ${provider}` : ""}
+                            {money(total, currency)
+                              ? ` · ${money(total, currency)}`
+                              : ""}
+                          </span>
+                        </div>
+                      </li>
+                    );
+                  })}
+              </ol>
+            </section>
+          ))}
+
+          {bookings.length > 0 ? (
+            <section className="trp-card">
+              <h3>Bookings on this trip</h3>
+              <ul className="plan-bookings">
+                {bookings.map((booking) => (
+                  <li key={booking.id}>
+                    <span className="tag indigo">{booking.booking_type}</span>
+                    <span>{booking.status}</span>
+                    <span className="event-meta">
+                      {money(booking.total, booking.currency) ?? "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );
