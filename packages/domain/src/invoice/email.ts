@@ -48,7 +48,7 @@ export function buildInvoiceEmail(
       : `${BOOKING_LABEL[input.bookingType]}: ${oneLine(input.itemTitle)}`;
   const attachmentFilename = `invoice-${input.invoiceNumber}.pdf`;
   const lines = [
-    "Your TravelFlow booking is confirmed.",
+    "Your Travis booking is confirmed.",
     "",
     `Booking reference: ${reference}`,
     `Booked item: ${item}`,
@@ -60,7 +60,7 @@ export function buildInvoiceEmail(
     "This is a demo booking paid with a dummy payment. No real money moved.",
   ];
   return {
-    subject: `TravelFlow booking ${reference} confirmed - invoice ${input.invoiceNumber}`,
+    subject: `Travis booking ${reference} confirmed - invoice ${input.invoiceNumber}`,
     text: `${lines.join("\n")}\n`,
     attachmentFilename,
   };

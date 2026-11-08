@@ -232,7 +232,7 @@ class ContentStream {
 function drawInvoice(input: InvoicePdfInput): string {
   const page = new ContentStream();
   let y = 790;
-  page.text(MARGIN, y, true, 22, "TravelFlow");
+  page.text(MARGIN, y, true, 22, "Travis");
   y -= 18;
   page.text(MARGIN, y, false, 10, "Booking confirmation and invoice");
   y -= 34;
@@ -330,7 +330,7 @@ export function buildInvoicePdf(input: InvoicePdfInput): Uint8Array {
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     `<< /Length ${content.length} >>\nstream\n${content}endstream`,
-    `<< /Title ${infoTitle} /Producer (TravelFlow Assistant) /CreationDate (${pdfDate(input.issuedAt)}) >>`,
+    `<< /Title ${infoTitle} /Producer (Travis Assistant) /CreationDate (${pdfDate(input.issuedAt)}) >>`,
   ];
 
   let out = "%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n";
