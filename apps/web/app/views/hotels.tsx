@@ -34,6 +34,7 @@ import {
   nightsBetween,
 } from "./places-options";
 import { CityPicker } from "./city-picker";
+import { DateRangePopover } from "./date-popover";
 import { HotelFacts, PhotoSheet, RoomFacts } from "./hotel-facts";
 import { GuestStepper, SearchField } from "./search-fields";
 import { useTraveller } from "./use-traveller";
@@ -626,30 +627,17 @@ export default function HotelsView({
             }
             icon="▦"
             label="Check-in → Check-out"
+            plain
           >
-            <span className="date-range">
-              <input
-                aria-label="Check-in"
-                min={dateFromToday(0)}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setCheckin(value);
-                  if (checkout && value >= checkout) setCheckout("");
-                }}
-                type="date"
-                value={checkin}
-              />
-              <span aria-hidden="true" className="date-arrow">
-                →
-              </span>
-              <input
-                aria-label="Check-out"
-                min={checkin || dateFromToday(1)}
-                onChange={(event) => setCheckout(event.target.value)}
-                type="date"
-                value={checkout}
-              />
-            </span>
+            <DateRangePopover
+              checkin={checkin}
+              checkout={checkout}
+              minIso={dateFromToday(0)}
+              onChange={(next) => {
+                setCheckin(next.checkin);
+                setCheckout(next.checkout);
+              }}
+            />
           </SearchField>
           <SearchField icon="☺" label="Guests">
             <GuestStepper onChange={setAdults} value={adults} />

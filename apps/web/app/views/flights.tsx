@@ -30,6 +30,7 @@ import {
   providerStateTone,
 } from "./provider-booking-parts";
 import { CURRENCIES } from "./places-options";
+import { DatePopover } from "./date-popover";
 import { SearchField } from "./search-fields";
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
@@ -687,11 +688,17 @@ export default function FlightsView({
               value={destination}
             />
           </SearchField>
-          <SearchField error={errors.date} hint="One way" icon="◷" label="Departure">
-            <input
-              min={dateFromToday(0)}
-              onChange={(event) => setDate(event.target.value)}
-              type="date"
+          <SearchField
+            error={errors.date}
+            hint="One way"
+            icon="◷"
+            label="Departure"
+            plain
+          >
+            <DatePopover
+              label="Pick a date"
+              minIso={dateFromToday(0)}
+              onChange={setDate}
               value={date}
             />
           </SearchField>
