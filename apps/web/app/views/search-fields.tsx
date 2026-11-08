@@ -11,12 +11,14 @@ import type { ReactNode } from "react";
  */
 export function SearchField({
   label,
+  icon,
   hint,
   error,
   className,
   children,
 }: {
   label: string;
+  icon?: string | undefined;
   hint?: string | undefined;
   error?: string | null | undefined;
   className?: string | undefined;
@@ -26,7 +28,14 @@ export function SearchField({
     <label
       className={`search-field ${className ?? ""} ${error ? "has-error" : ""}`}
     >
-      <span className="search-field-label">{label}</span>
+      <span className="search-field-label">
+        {icon ? (
+          <span aria-hidden="true" className="search-field-icon">
+            {icon}
+          </span>
+        ) : null}
+        {label}
+      </span>
       {children}
       {error ? (
         <span className="field-error" role="alert">
