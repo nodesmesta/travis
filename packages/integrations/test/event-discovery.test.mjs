@@ -12,7 +12,7 @@ test("query asks for Full JSON explicitly and reads naturally", () => {
   const query = buildEventDiscoveryQuery(input());
   const url = new URL(query.searchUrl);
   assert.equal(url.searchParams.get("brd_json"), "1");
-  assert.equal(url.searchParams.get("hl"), "en");
+  assert.equal(url.searchParams.get("setlang"), "en");
   const q = url.searchParams.get("q");
   has(q, "Jakarta Convention Center");
   has(q, "business events");

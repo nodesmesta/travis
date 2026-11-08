@@ -169,7 +169,7 @@ if [[ "$BRIGHT_DATA_READY" -eq 1 ]]; then
   # request asks for parsed JSON explicitly (format raw + brd_json=1).
   # Bright Data reports many failures (captcha, denylisted IP, expect_element)
   # as HTTP 200 with an empty body, so the reason is read from response headers.
-  bright_data_target='https://www.google.com/search?q=events+near+Jakarta+Convention+Center+Jakarta&hl=en&gl=id&brd_json=1'
+  bright_data_target='https://www.bing.com/search?q=events+near+Jakarta+Convention+Center+Jakarta&setlang=en&brd_json=1'
   bright_data_body=$(cat <<JSON
 {
   "zone": "${BRIGHT_DATA_SERP_ZONE}",

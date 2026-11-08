@@ -123,7 +123,7 @@ const ctx = {
 
 test("activity query is built from structured context, not a user sentence", () => {
   const query = buildActivityDiscoveryQuery(activityInput);
-  has(query.searchUrl, "https://www.google.com/search?q=");
+  has(query.searchUrl, "https://www.bing.com/search?q=");
   has(query.searchUrl, "Jakarta%20Convention%20Center");
   has(query.searchUrl, "brd_json=1");
   assert.equal(
