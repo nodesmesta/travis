@@ -32,6 +32,7 @@ Status words used in this table:
 | Mobility: route comparison with deterministic ranking and departure recommendation | Fixture-verified. **Not verified live**: `HERE_API_KEY` is empty. The Mobility view was not opened in a browser |
 | Weather and traffic snapshots | **Not verified live**: `OPENWEATHER_API_KEY` and `HERE_API_KEY` are empty |
 | Nearby activities (Bright Data) and restaurants (HERE) | **Not verified live**. Booking an activity is verified with fixture rows |
+| Hotel and flight search, sandbox prebook, payment, provider booking, reconciliation, cancellation, and invoice through LiteAPI | **Implemented** through authenticated API routes and Hotels/Flights workspace views. The provider key uses LiteAPI sandbox/account test payment, so no real card is charged; live production fulfillment still requires a production provider account and deployment validation |
 | Itinerary view (timeline, recommendations, activity log) | Implemented; build passes. The assistant confirmation flow that changes the itinerary was verified in a browser |
 | Alerts and background worker (departure reminder, traffic risk, weather risk) | Job claim, lease, deduplication and ownership verified against real Postgres. Alert content fixture-verified. Not verified against live HERE or OpenWeather. The Alerts view was not opened in a browser |
 | Health check `GET /health` | Implemented |
@@ -90,6 +91,17 @@ Recorded live checks (`scripts/provider-smoke-test.sh`, `docs/validation/task-07
 The target is one Vultr VM (8 vCPU, 16 GB RAM, 160 GB NVMe or SSD, Ubuntu 24.04) running Docker Compose with the web app, the API, the worker, a reverse proxy with HTTPS, and a self-hosted Supabase stack (Auth, Postgres, Storage). PostgreSQL and Supabase Studio are not meant to be exposed to the internet. The design is in `plan/segments/09-infrastructure-security.md` and `plan/integrations/supabase-on-vultr.md`.
 
 What exists in the repository for this target: the web app builds with `output: "standalone"` (`apps/web/next.config.ts`), the API and worker are plain Node.js processes configured by environment variables, and every database change is a numbered migration in `supabase/migrations/`. `deploy/` holds Dockerfiles for web, api, and worker, a Compose file, a Caddyfile, and a production env template. `npm run verify:deploy-local` builds the images and starts the stack against the local Supabase (42 checks passed, 2 skipped, on 7 November 2026). What does not exist yet: a provisioned VM, a domain, HTTPS issued for a real name, the self-hosted Supabase stack, and a deployed health run. See [deploy/README.md](deploy/README.md).
+
+## How we use LiteAPI
+
+LiteAPI is connected server-side for hotel and flight availability, prebook, sandbox payment, provider booking, reconciliation, cancellation, and invoice generation. The API key remains in the API environment and is sent only as the `x-api-key` request header. The authenticated workspace exposes:
+
+- `POST /trips/{tripId}/hotels/search`, `/hotels/prebook`, `/hotels/{providerBookingId}/book`, reconciliation, and cancellation.
+- `POST /trips/{tripId}/flights/search`, `/flights/prebook`, `/flights/{providerBookingId}/book`, reconciliation, and cancellation.
+- Provider booking attempts are persisted separately from internal bookings. A stable local `client_reference` prevents a second provider order when a request is replayed.
+- Local dummy payment must succeed before the provider book call. Confirmed provider bookings are eligible for the existing invoice PDF and email flow.
+
+The API checks trip ownership, applies per-user rate limits, enforces provider timeout and response-size limits, and does not retry provider calls. Timeout or unknown provider outcomes are stored as `unknown` and require reconciliation; they are never reported as successful. Sandbox hotel responses are labeled as sandbox, and the UI does not claim production fulfillment. Full passport numbers and card data are not persisted.
 
 ## How we use Bright Data
 
@@ -169,6 +181,7 @@ npm run bootstrap:local            # demo user, demo trip seed, writes .env.loca
 - Bright Data: `BRIGHT_DATA_API_KEY`, `BRIGHT_DATA_SERP_ZONE`, `BRIGHT_DATA_UNLOCKER_ZONE`.
 - Vultr Serverless Inference: `VULTR_INFERENCE_API_KEY` (base URL and model are filled with defaults).
 - HERE and OpenWeather: `HERE_API_KEY`, `OPENWEATHER_API_KEY`. Without them, routes, weather, traffic and restaurants return a structured "not configured" error and nothing is invented.
+- LiteAPI: `LITEAPI_API_KEY`. The Hotels and Flights views use this for live sandbox rates, prebook, provider booking, reconciliation, and cancellation. It is optional; without it, the routes return a structured configuration error.
 - Local email through Mailpit: `EMAIL_PROVIDER=smtp`, `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT=1025`. Mailpit's SMTP port is not published to the host, so `SMTP_HOST` is the container address (`docker inspect supabase_inbucket_vultr`). Mailpit's web UI is at `http://127.0.0.1:55424`. Note that `bootstrap:local` does not preserve these email variables when you run it again, so set them after the last bootstrap.
 
 Then build and run (three terminals):

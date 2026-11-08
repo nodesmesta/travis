@@ -29,6 +29,8 @@ export type ViewId =
   | "mobility"
   | "assistant"
   | "itinerary"
+  | "flights"
+  | "hotels"
   | "alerts"
   | "invoices"
   | "trips";
@@ -42,6 +44,8 @@ export const VIEWS: Array<{ id: ViewId; label: string; hint: string }> = [
   { id: "mobility", label: "Mobility", hint: "Routes, weather, traffic" },
   { id: "assistant", label: "Assistant", hint: "Ask about your trip" },
   { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
+  { id: "flights", label: "Flights", hint: "LiteAPI flight rates" },
+  { id: "hotels", label: "Hotels", hint: "LiteAPI hotel rates" },
   { id: "alerts", label: "Alerts", hint: "What changed" },
   { id: "invoices", label: "Invoices", hint: "Receipts and email" },
   { id: "trips", label: "Trips", hint: "Create or change a trip" },

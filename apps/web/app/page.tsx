@@ -5,6 +5,8 @@ import ActiveAlertsSummary from "./views/alerts-summary";
 import AssistantView from "./views/assistant";
 import InvoicesView from "./views/invoices";
 import ItineraryView from "./views/itinerary";
+import FlightsView from "./views/flights";
+import HotelsView from "./views/hotels";
 import MobilityView from "./views/mobility";
 import TripsView from "./views/trips";
 import { VIEWS, type ViewId, type ViewProps } from "./views/types";
@@ -45,16 +47,47 @@ function formatMoney(currency: string, amount: number): string {
   return `${currency} ${new Intl.NumberFormat("en-US").format(amount)}`;
 }
 
-function formatDate(
-  value: string | null | undefined,
-  timezone = "Asia/Jakarta",
-) {
+function formatDate(value: string | null | undefined, timezone = "UTC") {
   if (!value) return "Date to be confirmed";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(value));
+}
+
+function datePart(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
+
+function timePart(value: string | null, timezone: string): string {
+  if (!value) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: timezone,
+  }).formatToParts(new Date(value));
+  const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+  return hour && minute ? `${hour}:${minute}` : "";
+}
+
+function timezoneTimestamp(
+  date: string,
+  time: string,
+  timezone: string,
+): string {
+  const probe = new Date(`${date}T${time}:00Z`);
+  const zone =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(probe)
+      .find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const offset = zone.replace("GMT", "") || "+00:00";
+  return `${date}T${time}:00${offset}`;
 }
 
 function friendlyError(error: unknown): string {
@@ -307,11 +340,13 @@ function ContextSelector({
 function EventCard({
   event,
   sources,
+  timezone,
   selected,
   onSelect,
 }: {
   event: EventItem;
   sources: EventDiscoveryResponse["sources"];
+  timezone: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -326,7 +361,7 @@ function EventCard({
       </div>
       <h3>{event.title}</h3>
       <p className="event-meta">
-        <span>◷</span> {formatDate(event.starts_at)}
+        <span>◷</span> {formatDate(event.starts_at, timezone)}
       </p>
       <p className="event-meta">
         <span>⌖</span> {event.venue_name ?? "Venue details in source"}
@@ -507,6 +542,8 @@ function ViewHost({
       {view === "mobility" ? <MobilityView {...viewProps} /> : null}
       {view === "assistant" ? <AssistantView {...viewProps} /> : null}
       {view === "itinerary" ? <ItineraryView {...viewProps} /> : null}
+      {view === "flights" ? <FlightsView {...viewProps} /> : null}
+      {view === "hotels" ? <HotelsView {...viewProps} /> : null}
       {view === "alerts" ? <AlertsView {...viewProps} /> : null}
       {view === "invoices" ? <InvoicesView {...viewProps} /> : null}
     </>
@@ -530,9 +567,9 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState("business_events");
-  const [date, setDate] = useState("2026-11-12");
-  const [fromTime, setFromTime] = useState("18:00");
-  const [toTime, setToTime] = useState("23:00");
+  const [date, setDate] = useState("");
+  const [fromTime, setFromTime] = useState("");
+  const [toTime, setToTime] = useState("");
   const [view, setView] = useState<ViewId>("explore");
 
   async function loadWorkspace() {
@@ -570,6 +607,12 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   useEffect(() => {
     tripRef.current = trip;
   }, [trip]);
+
+  useEffect(() => {
+    setDate(datePart(trip?.start_at ?? null));
+    setFromTime(timePart(trip?.start_at ?? null, trip?.timezone ?? "UTC"));
+    setToTime(timePart(trip?.end_at ?? null, trip?.timezone ?? "UTC"));
+  }, [trip?.id, trip?.start_at, trip?.end_at, trip?.timezone]);
 
   function firstResolvedPoint(points: ContextPoint[]): ContextPoint | null {
     return (
@@ -679,8 +722,8 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
       const result = await discoverEvents(trip.id, {
         context_point_id: context.id,
         observed_for: {
-          from: `${date}T${fromTime}:00+07:00`,
-          to: `${date}T${toTime}:00+07:00`,
+          from: timezoneTimestamp(date, fromTime, context.timezone),
+          to: timezoneTimestamp(date, toTime, context.timezone),
           timezone: context.timezone,
         },
         filters: { category, radius_preference: "nearby", language: "en" },
@@ -790,7 +833,11 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
       >
         <aside className="sidebar">
           <div className="trip-summary">
-            <p className="eyebrow">JAKARTA, INDONESIA</p>
+            <p className="eyebrow">
+              {trip?.destination_summary ??
+                context?.label ??
+                "DESTINATION NOT SET"}
+            </p>
             <h2>{trip?.name ?? "Travel workspace"}</h2>
             <p>
               {trip?.start_at
@@ -956,6 +1003,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                       key={event.id}
                       event={event}
                       sources={selectedSource}
+                      timezone={context?.timezone ?? trip?.timezone ?? "UTC"}
                       selected={selectedEvent?.id === event.id}
                       onSelect={() => {
                         if (selectedEvent?.id !== event.id) {

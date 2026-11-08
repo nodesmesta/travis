@@ -1,5 +1,5 @@
 import type { CommandContext } from "@travelflow/domain";
-import { quoteBooking } from "../pricing.js";
+import { quoteBooking, type PricedBookingType } from "../pricing.js";
 import { AppError } from "../errors.js";
 import type { SupabaseTripContextRepository } from "../repositories/trip-context-repository.js";
 import {
@@ -15,7 +15,7 @@ import type { Booking } from "../supabase/database.types.js";
 export interface CreateBookingInput {
   tripId: string;
   userId: string;
-  bookingType: Booking["booking_type"];
+  bookingType: PricedBookingType;
   sourceType: Booking["source_type"];
   sourceId: string;
   startsAt: string | null;

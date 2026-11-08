@@ -22,6 +22,8 @@ tags:
   - name: Payments
   - name: Mobility
   - name: Places
+  - name: Hotels
+  - name: Flights
   - name: Assistant
   - name: Alerts
   - name: Invoices
@@ -773,6 +775,218 @@ paths:
           content:
             application/json:
               schema: { $ref: './schemas/error-envelope.schema.json' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/hotels/search:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Hotels]
+      operationId: searchHotels
+      summary: Search hotel rates through LiteAPI
+      description: |
+        Searches LiteAPI using the server-side API key. The response contains normalized
+        offers only. Results are not persisted and an offer must be prebooked before any
+        future provider booking flow. The route requires an authenticated owner of the trip.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HotelSearchRequest' }
+      responses:
+        '200':
+          description: Normalized hotel rates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HotelSearchResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/hotels/prebook:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Hotels]
+      operationId: prebookHotel
+      summary: Prebook a LiteAPI hotel offer
+      description: |
+        Reserves the price of an offer with LiteAPI. This is not a local booking and does
+        not create an invoice or a dummy payment. The Idempotency-Key is required because
+        the provider operation reserves an offer; replaying the same key and body returns
+        the stored normalized result.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HotelPrebookRequest' }
+      responses:
+        '200':
+          description: Normalized prebook result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HotelPrebookResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/hotels/{providerBookingId}/book:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: providerBookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Hotels]
+      operationId: bookHotel
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HotelBookRequest' }
+      responses:
+        '200':
+          description: Sandbox provider booking result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/hotels/{providerBookingId}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: providerBookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Hotels]
+      operationId: getHotelBooking
+      responses:
+        '200':
+          description: Reconciled hotel provider status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/hotels/{providerBookingId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: providerBookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Hotels]
+      operationId: cancelHotelBooking
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Hotel cancellation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/flights/search:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Hotels]
+      operationId: searchFlights
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FlightSearchRequest' }
+      responses:
+        '200':
+          description: Normalized flight journeys
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FlightSearchResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/flights/prebook:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+    post:
+      tags: [Hotels]
+      operationId: prebookFlight
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FlightPrebookRequest' }
+      responses:
+        '200':
+          description: Flight prebook and local payment attempt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/flights/{providerBookingId}/book:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: providerBookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Hotels]
+      operationId: bookFlight
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Flight booking status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/flights/{providerBookingId}:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: providerBookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Hotels]
+      operationId: getFlightBooking
+      responses:
+        '200':
+          description: Reconciled flight provider status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
+        default: { $ref: '#/components/responses/Error' }
+
+  /trips/{tripId}/flights/{providerBookingId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/TripId'
+      - name: providerBookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Hotels]
+      operationId: cancelFlightBooking
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Asynchronous flight cancellation request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderBookingResponse' }
         default: { $ref: '#/components/responses/Error' }
 
   /trips/{tripId}/bookings:
@@ -1660,6 +1874,146 @@ components:
               status: { type: string, enum: [ok, failing, not_configured] }
               code: { type: string }
               detail: { type: object, additionalProperties: true }
+    HotelSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [city, country_code, checkin, checkout, adults, currency, guest_nationality]
+      properties:
+        city: { type: string, minLength: 1 }
+        country_code: { type: string, minLength: 2, maxLength: 2 }
+        checkin: { type: string, format: date }
+        checkout: { type: string, format: date }
+        adults: { type: integer, minimum: 1, maximum: 9 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        guest_nationality: { type: string, minLength: 2, maxLength: 2 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+    HotelStay:
+      type: object
+      required: [hotel_id, name, address, city, country_code, latitude, longitude, stars, rating, review_count, photo_url]
+      properties:
+        hotel_id: { type: string }
+        name: { type: string }
+        address: { type: [string, 'null'] }
+        city: { type: [string, 'null'] }
+        country_code: { type: [string, 'null'] }
+        latitude: { type: [number, 'null'] }
+        longitude: { type: [number, 'null'] }
+        stars: { type: [number, 'null'] }
+        rating: { type: [number, 'null'] }
+        review_count: { type: [number, 'null'] }
+        photo_url: { type: [string, 'null'] }
+    HotelOffer:
+      type: object
+      required: [offer_id, room_name, board_name, total, taxes_included, refundable, free_cancellation_until]
+      properties:
+        offer_id: { type: string }
+        room_name: { type: string }
+        board_name: { type: [string, 'null'] }
+        total:
+          type: object
+          required: [amount, currency]
+          properties:
+            amount: { type: number, minimum: 0 }
+            currency: { type: string }
+        taxes_included: { type: [number, 'null'] }
+        refundable: { type: string, enum: [refundable, non_refundable, unknown] }
+        free_cancellation_until: { type: [string, 'null'], format: date-time }
+    HotelSearchResponse:
+      type: object
+      required: [hotels, retrieved_at, provider_request_id, sandbox, trip_id, request_id]
+      properties:
+        hotels:
+          type: array
+          items:
+            type: object
+            required: [hotel, cheapest]
+            properties:
+              hotel: { $ref: '#/components/schemas/HotelStay' }
+              cheapest: { $ref: '#/components/schemas/HotelOffer' }
+        retrieved_at: { type: string, format: date-time }
+        provider_request_id: { type: [string, 'null'] }
+        sandbox: { type: boolean }
+        trip_id: { type: string, format: uuid }
+        request_id: { type: string }
+    HotelPrebookRequest:
+      type: object
+      additionalProperties: false
+      required: [offer_id]
+      properties:
+        offer_id: { type: string, minLength: 1 }
+    HotelPrebookResponse:
+      type: object
+      required: [prebook_id, hotel_id, total, checkin, checkout, price_difference_percent, cancellation_changed, board_changed, trip_id, request_id]
+      properties:
+        prebook_id: { type: string }
+        hotel_id: { type: string }
+        total:
+          type: object
+          required: [amount, currency]
+          properties:
+            amount: { type: number, minimum: 0 }
+            currency: { type: string }
+        checkin: { type: string, format: date }
+        checkout: { type: string, format: date }
+        price_difference_percent: { type: number }
+        cancellation_changed: { type: boolean }
+        board_changed: { type: boolean }
+        trip_id: { type: string, format: uuid }
+        request_id: { type: string }
+    HotelBookRequest:
+      type: object
+      additionalProperties: false
+      required: [holder, guests]
+      properties:
+        holder:
+          type: object
+          required: [first_name, last_name, email, phone]
+          properties:
+            first_name: { type: string, minLength: 1 }
+            last_name: { type: string, minLength: 1 }
+            email: { type: string, format: email }
+            phone: { type: string, minLength: 1 }
+        guests:
+          type: array
+          minItems: 1
+          maxItems: 9
+          items:
+            type: object
+            required: [first_name, last_name, email, occupancy_number]
+            properties:
+              first_name: { type: string, minLength: 1 }
+              last_name: { type: string, minLength: 1 }
+              email: { type: string, format: email }
+              occupancy_number: { type: integer, minimum: 1 }
+    FlightSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [origin, destination, date, adults, currency]
+      properties:
+        origin: { type: string, minLength: 3, maxLength: 3 }
+        destination: { type: string, minLength: 3, maxLength: 3 }
+        date: { type: string, format: date }
+        adults: { type: integer, minimum: 1, maximum: 9 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+    FlightPrebookRequest:
+      type: object
+      additionalProperties: true
+      required: [offer_id, purpose, contact, passengers]
+      properties:
+        offer_id: { type: string, minLength: 1 }
+        purpose: { type: string, enum: [BUSINESS, LEISURE] }
+        contact: { type: object }
+        passengers: { type: array, minItems: 1, maxItems: 9 }
+    ProviderBookingResponse:
+      type: object
+      required: [booking, provider_booking, request_id]
+      properties:
+        booking: { $ref: './schemas/booking.schema.json' }
+        provider_booking: { type: object, additionalProperties: true }
+        provider: { type: object, additionalProperties: true }
+        prebook: { type: object, additionalProperties: true }
+        request_id: { type: string }
     CreateBookingRequest:
       type: object
       additionalProperties: false

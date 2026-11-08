@@ -16,6 +16,18 @@ export interface ProviderCall {
   fetchImpl: typeof fetch;
   /** Name of the query parameter that carries the key, removed from audit URLs. */
   keyParam: string;
+  /** HTTP method. GET when omitted. */
+  method?: "GET" | "POST" | "PUT";
+  /** Extra request headers, for example an API key header. Never logged. */
+  headers?: Record<string, string>;
+  /** JSON body for POST and PUT. */
+  body?: unknown;
+  /**
+   * Keep the provider's own error body on a 400 or 404, under `details.provider_error`.
+   * Use it only for providers whose error bodies are written for API clients and carry
+   * no secret (for example "the airline requires a travel document").
+   */
+  exposeClientErrors?: boolean;
 }
 
 export interface ProviderJson {
@@ -45,6 +57,43 @@ export function auditUrl(url: URL, keyParam: string): string {
   return copy.toString();
 }
 
+const MAX_CLIENT_ERROR_TEXT = 300;
+
+/**
+ * Reads a provider error body of the shape `{ error: { code, description, key } }`
+ * into a small, bounded object. Anything else yields null, so an unexpected body
+ * (an HTML error page, a stack trace) is never passed on.
+ */
+function clientErrorOf(
+  text: string,
+): { code: number | string; description: string; field?: string } | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const error = asRecord(asRecord(parsed)?.error);
+  if (!error) return null;
+  const code = error.code;
+  // Some answers carry `description`, others only `message` (a duplicate booking
+  // reference, for example). Take whichever is there, the longer explanation first.
+  const description =
+    nonBlankString(error.description) ?? nonBlankString(error.message);
+  if (
+    (typeof code !== "number" && typeof code !== "string") ||
+    description === null
+  ) {
+    return null;
+  }
+  const field = nonBlankString(error.key);
+  return {
+    code,
+    description: description.slice(0, MAX_CLIENT_ERROR_TEXT),
+    ...(field ? { field: field.slice(0, 120) } : {}),
+  };
+}
+
 export async function callProviderJson(
   call: ProviderCall,
 ): Promise<ProviderJson> {
@@ -54,8 +103,15 @@ export async function callProviderJson(
   let response: Response;
   try {
     response = await call.fetchImpl(call.url.toString(), {
-      method: "GET",
-      headers: { accept: "application/json" },
+      method: call.method ?? "GET",
+      headers: {
+        accept: "application/json",
+        ...(call.body === undefined
+          ? {}
+          : { "content-type": "application/json" }),
+        ...call.headers,
+      },
+      ...(call.body === undefined ? {} : { body: JSON.stringify(call.body) }),
       signal: controller.signal,
     });
   } catch (error) {
@@ -122,7 +178,12 @@ export async function callProviderJson(
         `${call.label} could not process the request.`,
         422,
         false,
-        { provider_status: response.status },
+        {
+          provider_status: response.status,
+          ...(call.exposeClientErrors
+            ? { provider_error: clientErrorOf(text) }
+            : {}),
+        },
       );
     }
     if (!response.ok) {

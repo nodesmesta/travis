@@ -27,6 +27,8 @@ const BOOKING_LABEL: Record<Booking["booking_type"], string> = {
   event: "Event booking",
   activity: "Activity booking",
   itinerary_item: "Itinerary item booking",
+  hotel: "Hotel booking",
+  flight: "Flight booking",
 };
 
 export function invoiceError(error: unknown): string {

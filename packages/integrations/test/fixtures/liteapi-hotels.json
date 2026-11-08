@@ -1,0 +1,172 @@
+{
+  "sandbox": true,
+  "hotels": [
+    {
+      "id": "lp9e148",
+      "name": "Ashley Wahid Hasyim Jakarta",
+      "main_photo": "https://static.cupid.travel/hotels/423303707.jpg",
+      "thumbnail": "https://static.cupid.travel/hotels/thumbnail/423303707.jpg",
+      "address": "Jalan K.H. Wahid Hasyim No. 73-75",
+      "country_code": "ID",
+      "city_name": "Jakarta",
+      "latitude": -6.187309,
+      "longitude": 106.827057,
+      "rating": 9.8,
+      "stars": 4,
+      "review_count": 2444
+    },
+    {
+      "id": "lpff41b",
+      "name": "Holiday Inn & Suites Jakarta Gajah Mada by IHG",
+      "main_photo": "https://static.cupid.travel/hotels/180949352.jpg",
+      "thumbnail": "https://static.cupid.travel/hotels/thumbnail/180949352.jpg",
+      "address": "Jl. Gajah Mada No. 211",
+      "country_code": "ID",
+      "city_name": "Jakarta",
+      "latitude": -6.145248,
+      "longitude": 106.815206,
+      "rating": 9,
+      "stars": 4,
+      "review_count": 1782
+    },
+    {
+      "id": "lp6557d8b8",
+      "name": "Ashley Tanah Abang",
+      "main_photo": "https://static.cupid.travel/hotels/412913347.jpg",
+      "thumbnail": "https://static.cupid.travel/hotels/thumbnail/412913347.jpg",
+      "address": "Jalan K.H. Wahid Hasyim No. 220",
+      "country_code": "ID",
+      "city_name": "Jakarta",
+      "latitude": -6.186934,
+      "longitude": 106.817217,
+      "rating": 9.8,
+      "stars": 4,
+      "review_count": 3902
+    }
+  ],
+  "data": [
+    {
+      "hotelId": "lpff41b",
+      "roomTypes": [
+        {
+          "roomTypeId": "RT",
+          "offerId": "AwJ2MQAAAABq8V9-PnEq3yUpPj97rL6NLS5b5pp4pWhncTku2y1Ou5WQRXCP2IchgSysw8pn68FmPCNW8A1B27aLctEarbWdAn5kE5krusdOT2nRSI_r-nEjuQUgozwKrDyBuy5w0yErqTBrbbNYjxmBPPjiVgYPF2VSppgq2XP43btxqEXjYG__FDdO8uA-40KZimC6jSykcqyKuAwHBnP8DgUk3k07VBfXDv9_OBStPP5T9OBpgnCuAD6PglTOmQvpt2U9koOTHUW3g3Bj0x7C3dE0pXGjbdziF_fQfMOuTYIBodFB3OHHVkdZOiGMB3x44JiY3opXHmV98VduJvyauML9Gi3V75hmlL6xpjxJPuxZFxHIOcLDTrExNTIgFuX2TG9wyHT0SxUEawUTA8iefnaiFjs1lKOigESVK6DJlW1r5obVqoxc7RNJVLFBmdoTGqdig1YAP4SVEXohhIP_GvmAPT_lwOtqaHRgFwcdqq87Z9PAJoiRBg9Bw90mUdr8Ac3D8opJZ5UxMZHJR6MM4YdEqmYP-X1kLiyaa9kNZBvcSUEN4L2wT8VqpDzATn5q5ZO3ZqOwqxj8Br0ZtGA9DdSCW-1hNOsgyuHCToIwlW0rvyxFsgfNcvZqeZpXHnSHtjznzGudXYtddAivrj-CzFwTsaYbtVrR-HYpcNkXYskRjJMCYEBg4tAWABbZh37FrXAZ3u-mUe3giKodPG3RtTiWmwPjmShwsDQCKkMn1n-SciIC4fHUgM5AE0XQ5HWZYfvsDtOL6_jGrOdvYNjWnupvCYz41pBTBpisosBRUPtri_rB78CCSHmzSqiWWdVhPV11Y-wmt8M3tDob3_HncPntCQsNIcP5DEdJwp1qoxZpMhsvFhFnw-JrAa40-29JBdYyqeFow5a8O-0BED39a848rC1LG3PZqkagwpkyIKpuBcn00lAyY5hZTEBsa-t_b-06n8dxOSSKfYdmRbvXiAZX4fr2D3S3ehs83LOll1jYCSZTvJ2bE4NGWxkOWmin8x0dCagYXk0fGMKMejwomIc0PO0BRL0BbYy4ZwKooMeNfRMEP5y7tFYBet39TZXSfEMCqkgIpIeAm3p8qA==",
+          "rates": [
+            {
+              "rateId": "R",
+              "name": "Standard Room",
+              "boardName": "Breakfast Included",
+              "retailRate": {
+                "total": [
+                  {
+                    "amount": 2111856.43,
+                    "currency": "IDR"
+                  }
+                ],
+                "taxesAndFees": [
+                  {
+                    "included": true,
+                    "description": "TAX",
+                    "amount": 232304.21,
+                    "currency": "IDR"
+                  },
+                  {
+                    "included": true,
+                    "description": "Property service charge",
+                    "amount": 211185.64,
+                    "currency": "IDR"
+                  }
+                ]
+              },
+              "cancellationPolicies": {
+                "refundableTag": "NRFN"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hotelId": "lp6557d8b8",
+      "roomTypes": [
+        {
+          "roomTypeId": "RT",
+          "offerId": "AwJ2MQAAAABq8V9-M2Xij7ay8usY-XE1FcLuOqGd-Jk8u5nlO-kvp6stTHUAopybfIrr-XsRFT5beU0wXwhgyhgVSahjdkajyAKqcPoYZ11F7GpiMNkgwZ7bk99qgPw_JJx4YjgYQ4S0hqfPB9FB8DlV4Vc1DmVipDnVNTtIv1wyeZFFK1JM3puR4IREU-HgpMylXejVKudEAmTRgHthSQrkWtHY7ofTTyU7uEEXVVxd3pghDc0EXEnMuzx4VFg0ex3D9tl4kvl2ANnP-8lP_YwyWb4b283__YE-VpfKX1tr05hwqJKW6d1xb5ekPmov-LIdKS0Glk-LEZ_pTVTgOH66Rk6bCODEwvU9OZNaL3_1WDOXXc2884YztYc_P9P-N8-oPelDlIg7BpMY_SLFIOfPwXBzm_kTEGRhvyIvfP7NZsXAkPcZ3LeUNNoewpMnaOqPczqBxibDwZhkiFchHN-yQrgC9vlHVbrd5u2oHPqQbNWKwoCvoM2xPuDvormniPU1MK8k936hJ90smtAOXK_SHRgqhF_rCNFqOekDDuSElCGvofespLH151EbYZsF5simqi1BgiI9RypQ3c5E4WVM8l9lk1ftsazZdXxSK_ur2WdfvvmNzz6NzrncdyFJBVkW9NWCURu9bszOCQwBolLyHF7m7pbusjOwZRB9atd3WNCfw73T9LlHTbawl_6EmVDTjIaxCVJ6z3bxAzN9gn_H7Vlcoml5pDlI3uUyzbrAi2XQCj9kflrNQGkN1IaxckpUvDee1TcBtpAogfYIXDh9CxZR2XjCFYBSXVBLZLCk9SdiFv70_SRz9MvcrVg3wap-b2RFu5d_jF0KK2pCcO05qPdlvo-E5AkORHr_H6BRVQXfORNMh3M1LitoNAqZNYGBrFgyztZ9YRmqDZIlvNUaP1k3dI7uezfPzZoumMipipMay5BuiUsizn5jrQ_aZsBqJTiqevRZaQbaPzqBeObAgKBfqDPu-uZB1Xv8MQVEvsCZ-pE4tJHe5aEC8QtQKGfszOfr23gZmMds7T5tFrWzuibvnxk4DKJovdQq4G_d07nox1iF4IJEmcQlU4CvMn9QiLDolb798FraM-01QT04xBu-RDSXCKSgqvuPyoPOVFOcSGexpluIe7bUdLx5AtYTT4qTFkI=",
+          "rates": [
+            {
+              "rateId": "R",
+              "name": "Superior Double Room",
+              "boardName": "Breakfast Included",
+              "retailRate": {
+                "total": [
+                  {
+                    "amount": 2233347.86,
+                    "currency": "IDR"
+                  }
+                ],
+                "taxesAndFees": [
+                  {
+                    "included": true,
+                    "description": "Sales tax",
+                    "amount": 206893.19,
+                    "currency": "IDR"
+                  },
+                  {
+                    "included": true,
+                    "description": "Service charge (taxable)",
+                    "amount": 180528.04,
+                    "currency": "IDR"
+                  }
+                ]
+              },
+              "cancellationPolicies": {
+                "refundableTag": "NRFN"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hotelId": "lp9e148",
+      "roomTypes": [
+        {
+          "roomTypeId": "RT",
+          "offerId": "AwJ2MQAAAABq8V9-vS0KJgl2FdbwwFR4uwOUlj1dZPm9mauhCmRMkgW88-CAamz0JuYS_bqRPd-H3FG1r4m6p6OWUK1Y_jPx6ls_Mwij4pyC6GDjS8jxJDjYDC6p-zvQGbjodh6UFsXin0YHevbhPQBMFZcvJpQWI-1Vi73naRrebCk8Mnt9qJQTJgP6Kk-UO_YHgXJRGuPIvdjxRlFX7P45IWOGTAAO2XIzbdhNcVKpbXq0P8JZEdoszjBU2EK6Dc04om-VYbt8r3cqCLIR3fLeArgnEo9vF5zBbSRvPEc19swr3Geg1TyX-I3Zg5kZsmwSBbx_sKsCBh9rVsjRebaN_EPFWuNodRi05NVxDX3f4OoYKBUxPdxzJtIQ0nxwzTqiVjXuJA2eKTthxobE4zlhmtwRkHbhmPV_lW7mlJzQH4sQshW7nU1A-FD9LJqMR3TQOk0iMncyMUcMJZlXWHRMV1Wb7V9wIVypc27TAcEOzkQYPBnnuwOeNvUU4W19D_Oro54i0D5b8C6eugLwNlEuX2_eM8DaRblLiuxVRn6wph7hbZILcL6MDIQqfqy_MkHnHYg3fHQHK64f4ASW3xrZGgVOzSEaqKFMKuWS5UCFGPYuB2ieNrTnPcAtxGZeuzWWObccDh2boMpjVhwgAElgStKaYC3A-WJLU4kBMWmH3SA5pqVX2XsjTKGKzbXFbGXQNawIYAWB7B9EKKsqjg4YmYvdv9qtzINSJYGaGU-JJJHLGvNG4SPf0zbJ78AhjmiRQ9rhrpxWCutO87Hlzxwb7uoqRXCflXuc0m4yA8xdYQK1VYPvmQPQFunA59bdjlT_wb_RI48fd9ApDwJUDbp9s4GStJaLpyEqPbQpoQn6LY5u0916QuoAw27rVpwBNDBj0okZVCTUatjNdql4RmRbOfWOM01UeQU_K50R-v4tjO6yCe7mrLqGVV1qZUi5zTDWuXqYoQCeCncs2uJ8IZBZqndHobUiato95n72xLaUECUO3xCCbn9N42phqpIBdqzac10T8GXOJYYv6KQwtlO7VrISpL-FFADycT4NmEwWPp8O9BatvBNLR0d0ZwXdxGvPQ1MqCQ==",
+          "rates": [
+            {
+              "rateId": "R",
+              "name": "Superior Twin",
+              "boardName": "Breakfast Included",
+              "retailRate": {
+                "total": [
+                  {
+                    "amount": 1922275.71,
+                    "currency": "IDR"
+                  }
+                ],
+                "taxesAndFees": [
+                  {
+                    "included": true,
+                    "description": "Sales tax",
+                    "amount": 178330.94,
+                    "currency": "IDR"
+                  },
+                  {
+                    "included": true,
+                    "description": "Service charge (taxable)",
+                    "amount": 155261.43,
+                    "currency": "IDR"
+                  }
+                ]
+              },
+              "cancellationPolicies": {
+                "refundableTag": "NRFN"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

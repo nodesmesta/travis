@@ -100,6 +100,7 @@ const providerKeys = [
   "BRIGHT_DATA_API_KEY",
   "HERE_API_KEY",
   "OPENWEATHER_API_KEY",
+  "LITEAPI_API_KEY",
 ];
 const unconfigured = providerKeys.filter((name) => isBlank(env[name]));
 if (unconfigured.length > 0) {

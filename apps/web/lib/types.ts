@@ -70,8 +70,9 @@ export interface Booking {
   id: string;
   user_id: string;
   trip_id: string;
-  booking_type: "event" | "activity" | "itinerary_item";
-  source_type: "event_discovery_result" | "activity" | "agenda_item";
+  booking_type: "event" | "activity" | "itinerary_item" | "hotel" | "flight";
+  source_type:
+    "event_discovery_result" | "activity" | "agenda_item" | "liteapi_offer";
   source_id: string;
   provider_name?: string;
   confirmation_code?: string;

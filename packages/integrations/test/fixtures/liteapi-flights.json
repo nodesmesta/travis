@@ -1,0 +1,350 @@
+{
+  "data": [
+    {
+      "journeys": [
+        {
+          "journeyKey": "17870c52e444257d",
+          "isCheapest": true,
+          "segments": [
+            {
+              "arrivalTime": "2026-12-12T20:35:00",
+              "carrier": {
+                "marketingCode": "QZ",
+                "marketingLogo": "https://assets.nuitee.flights/static/images/airlines/QZ.png",
+                "marketingName": "Indonesia AirAsia",
+                "operatingCode": "QZ",
+                "operatingLogo": "https://assets.nuitee.flights/static/images/airlines/QZ.png",
+                "operatingName": "Indonesia AirAsia"
+              },
+              "departureTime": "2026-12-12T17:40:00",
+              "originCode": "CGK",
+              "destinationCode": "DPS",
+              "direction": "OUTBOUND",
+              "duration": {
+                "iso8601": "PT1H55M",
+                "minutes": 115
+              },
+              "flight": {
+                "marketingNumber": "818",
+                "operatingNumber": "818"
+              },
+              "segmentKey": "e3f4e23a",
+              "originName": "Soekarno-Hatta International Airport",
+              "destinationName": "Denpasar I Gusti Ngurah Rai International Airport",
+              "stopCount": 0
+            }
+          ],
+          "totalDuration": {
+            "iso8601": "PT1H55M",
+            "minutes": 115
+          },
+          "cheapestOffer": {
+            "offerId": "AwJ2MQAAAABq8V-G0E3ihRJc0shBu8AiL10eVCGhKqHhPvp5wkTwWIJLnnCH0pdZxGhf0b4rpkzZH-xyxRh2lrupjcqsij76Omomb-hU_0R1xMRa2AHfaTVw98-r6qX1o89eBBv5FCvTTVBmAEJnJofh-E9U6kvzLRpaaK1mCHFu3QDRIq88LVbKUNhJJX5yYEITntzSsO8h50rvXiOuKxZ2yQI4rwyTa59K",
+            "expiration": "2026-11-08T06:02:04.155Z",
+            "pricing": {
+              "display": {
+                "total": 1007436.08,
+                "currency": "IDR",
+                "base": 512390.11,
+                "fees": 18451.21,
+                "taxes": 476594.76,
+                "perPassenger": {
+                  "adult": {
+                    "base": 512390.11,
+                    "currency": "IDR",
+                    "fees": 18451.21,
+                    "taxes": 476594.76,
+                    "total": 1007436.08
+                  },
+                  "child": {
+                    "base": 512390.11,
+                    "currency": "IDR",
+                    "fees": 0,
+                    "taxes": 476594.76,
+                    "total": 988984.87
+                  },
+                  "infant": {
+                    "base": 361828.23,
+                    "currency": "IDR",
+                    "fees": 0,
+                    "taxes": 0,
+                    "total": 361828.23
+                  }
+                }
+              },
+              "converted": true
+            },
+            "baggage": {
+              "hasCarryOnBag": true,
+              "hasCheckedBag": false,
+              "included": [
+                {
+                  "bagType": "cabin",
+                  "description": "Carry-on bag",
+                  "passengerType": "ADT",
+                  "pieces": 1,
+                  "pricing": {
+                    "display": {
+                      "amount": 0,
+                      "currency": "IDR"
+                    },
+                    "converted": true
+                  },
+                  "size": "56*36*23cm",
+                  "unit": "kg",
+                  "weightKg": 7
+                }
+              ],
+              "paid": []
+            },
+            "fare": {
+              "family": "Cheapest",
+              "mixedCabin": false,
+              "mixedFareFamily": false,
+              "seatsRemaining": 5
+            },
+            "segmentFares": [
+              {
+                "bookingCode": "",
+                "cabin": "Economy",
+                "fareBasisCode": "",
+                "fareFamily": "Cheapest",
+                "seatsRemaining": 5,
+                "segmentKey": "e3f4e23a"
+              }
+            ]
+          },
+          "offers": []
+        },
+        {
+          "journeyKey": "b80be20e86ecc54e",
+          "isCheapest": false,
+          "segments": [
+            {
+              "arrivalTime": "2026-12-12T18:30:00",
+              "carrier": {
+                "marketingCode": "QZ",
+                "marketingLogo": "https://assets.nuitee.flights/static/images/airlines/QZ.png",
+                "marketingName": "Indonesia AirAsia",
+                "operatingCode": "QZ",
+                "operatingLogo": "https://assets.nuitee.flights/static/images/airlines/QZ.png",
+                "operatingName": "Indonesia AirAsia"
+              },
+              "departureTime": "2026-12-12T15:30:00",
+              "originCode": "CGK",
+              "destinationCode": "DPS",
+              "direction": "OUTBOUND",
+              "duration": {
+                "iso8601": "PT2H",
+                "minutes": 120
+              },
+              "flight": {
+                "marketingNumber": "820",
+                "operatingNumber": "820"
+              },
+              "segmentKey": "cfa704fe",
+              "originName": "Soekarno-Hatta International Airport",
+              "destinationName": "Denpasar I Gusti Ngurah Rai International Airport",
+              "stopCount": 0
+            }
+          ],
+          "totalDuration": {
+            "iso8601": "PT2H",
+            "minutes": 120
+          },
+          "cheapestOffer": {
+            "offerId": "AwJ2MQAAAABq8V-GIMabz2UIqlVtPp2PNZ66QI50TJOvivXAuHRSsIDxvNV_A3AYqvLbCob7VHj0L55jbn3hpYEzy_TRyDclOtal_R8bFvAbNVhxVaysKSr7zNlX6ALWrPceg-l_68w8D3aiMrGS5oxvl2flICaDrZpeIF5jwymEmDw5nJnkYp99_eDGBNpBCF6RP07jBdTeTCPSLiAG6vP-GSKjj8nm35ZT",
+            "expiration": "2026-11-08T06:02:04.158Z",
+            "pricing": {
+              "display": {
+                "total": 1086591.78,
+                "currency": "IDR",
+                "base": 538221.81,
+                "fees": 18451.21,
+                "taxes": 529918.76,
+                "perPassenger": {
+                  "adult": {
+                    "base": 538221.81,
+                    "currency": "IDR",
+                    "fees": 18451.21,
+                    "taxes": 529918.76,
+                    "total": 1086591.78
+                  },
+                  "child": {
+                    "base": 538221.81,
+                    "currency": "IDR",
+                    "fees": 0,
+                    "taxes": 529918.76,
+                    "total": 1068140.57
+                  },
+                  "infant": {
+                    "base": 342638.98,
+                    "currency": "IDR",
+                    "fees": 0,
+                    "taxes": 0,
+                    "total": 342638.98
+                  }
+                }
+              },
+              "converted": true
+            },
+            "baggage": {
+              "hasCarryOnBag": true,
+              "hasCheckedBag": false,
+              "included": [
+                {
+                  "bagType": "cabin",
+                  "description": "Carry-on bag",
+                  "passengerType": "ADT",
+                  "pieces": 1,
+                  "pricing": {
+                    "display": {
+                      "amount": 0,
+                      "currency": "IDR"
+                    },
+                    "converted": true
+                  },
+                  "size": "56*36*23cm",
+                  "unit": "kg",
+                  "weightKg": 7
+                }
+              ],
+              "paid": []
+            },
+            "fare": {
+              "family": "Cheapest",
+              "mixedCabin": false,
+              "mixedFareFamily": false,
+              "seatsRemaining": 9
+            },
+            "segmentFares": [
+              {
+                "bookingCode": "",
+                "cabin": "Economy",
+                "fareBasisCode": "",
+                "fareFamily": "Cheapest",
+                "seatsRemaining": 9,
+                "segmentKey": "cfa704fe"
+              }
+            ]
+          },
+          "offers": []
+        },
+        {
+          "journeyKey": "d9d88877b50e6ad7",
+          "isCheapest": false,
+          "segments": [
+            {
+              "arrivalTime": "2026-12-12T11:20:00",
+              "carrier": {
+                "marketingCode": "QZ",
+                "marketingLogo": "https://assets.nuitee.flights/static/images/airlines/QZ.png",
+                "marketingName": "Indonesia AirAsia",
+                "operatingCode": "QZ",
+                "operatingLogo": "https://assets.nuitee.flights/static/images/airlines/QZ.png",
+                "operatingName": "Indonesia AirAsia"
+              },
+              "departureTime": "2026-12-12T08:25:00",
+              "originCode": "CGK",
+              "destinationCode": "DPS",
+              "direction": "OUTBOUND",
+              "duration": {
+                "iso8601": "PT1H55M",
+                "minutes": 115
+              },
+              "flight": {
+                "marketingNumber": "808",
+                "operatingNumber": "808"
+              },
+              "segmentKey": "44fa002b",
+              "originName": "Soekarno-Hatta International Airport",
+              "destinationName": "Denpasar I Gusti Ngurah Rai International Airport",
+              "stopCount": 0
+            }
+          ],
+          "totalDuration": {
+            "iso8601": "PT1H55M",
+            "minutes": 115
+          },
+          "cheapestOffer": {
+            "offerId": "AwJ2MQAAAABq8V-GMpxhC6JN4Pz4SfdQL4TtIDimM-XeOW1R6PpGbq__aMK8aZnAGafYlfUkWK0El_5WNQdOIJQUzzriupKMrHGlz22b6I8ys1rapJ8FjWhBvxz2aUG1V5sXRlVF_ye3bcuva9YMHmiFG8ESQ9IVlpIMKTF9S4rWQK6Y_9he30L_OfrmwjGlE_hrLDLg5D5l_BwaeIISIzGDfPKU5kWEIbSx",
+            "expiration": "2026-11-08T06:02:04.156Z",
+            "pricing": {
+              "display": {
+                "total": 1106334.57,
+                "currency": "IDR",
+                "base": 682325.76,
+                "fees": 18451.21,
+                "taxes": 405557.6,
+                "perPassenger": {
+                  "adult": {
+                    "base": 682325.76,
+                    "currency": "IDR",
+                    "fees": 18451.21,
+                    "taxes": 405557.6,
+                    "total": 1106334.57
+                  },
+                  "child": {
+                    "base": 682325.76,
+                    "currency": "IDR",
+                    "fees": 0,
+                    "taxes": 405557.6,
+                    "total": 1087883.36
+                  },
+                  "infant": {
+                    "base": 427699.06,
+                    "currency": "IDR",
+                    "fees": 0,
+                    "taxes": 0,
+                    "total": 427699.06
+                  }
+                }
+              },
+              "converted": true
+            },
+            "baggage": {
+              "hasCarryOnBag": true,
+              "hasCheckedBag": false,
+              "included": [
+                {
+                  "bagType": "cabin",
+                  "description": "Carry-on bag",
+                  "passengerType": "ADT",
+                  "pieces": 1,
+                  "pricing": {
+                    "display": {
+                      "amount": 0,
+                      "currency": "IDR"
+                    },
+                    "converted": true
+                  },
+                  "size": "56*36*23cm",
+                  "unit": "kg",
+                  "weightKg": 7
+                }
+              ],
+              "paid": []
+            },
+            "fare": {
+              "family": "Cheapest",
+              "mixedCabin": false,
+              "mixedFareFamily": false,
+              "seatsRemaining": 9
+            },
+            "segmentFares": [
+              {
+                "bookingCode": "",
+                "cabin": "Economy",
+                "fareBasisCode": "",
+                "fareFamily": "Cheapest",
+                "seatsRemaining": 9,
+                "segmentKey": "44fa002b"
+              }
+            ]
+          },
+          "offers": []
+        }
+      ]
+    }
+  ]
+}

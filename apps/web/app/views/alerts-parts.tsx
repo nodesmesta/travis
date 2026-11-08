@@ -17,8 +17,11 @@ export function when(
 ): string {
   if (!value) return "Not recorded";
   return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     timeZone,
     timeZoneName: "short",
   }).format(new Date(value));

@@ -217,8 +217,9 @@ type BookingRow = {
   id: string;
   user_id: string;
   trip_id: string;
-  booking_type: "event" | "activity" | "itinerary_item";
-  source_type: "event_discovery_result" | "activity" | "agenda_item";
+  booking_type: "event" | "activity" | "itinerary_item" | "hotel" | "flight";
+  source_type:
+    "event_discovery_result" | "activity" | "agenda_item" | "liteapi_offer";
   source_id: string;
   provider_name: string;
   confirmation_code: string | null;
@@ -259,6 +260,78 @@ type PaymentRow = {
   created_at: string;
   updated_at: string;
 };
+
+type ProviderBookingRow = {
+  id: string;
+  booking_id: string;
+  user_id: string;
+  trip_id: string;
+  provider: "liteapi";
+  booking_type: "hotel" | "flight";
+  offer_id: string;
+  prebook_id: string | null;
+  client_reference: string;
+  provider_booking_id: string | null;
+  provider_status: string | null;
+  state:
+    | "created"
+    | "prebooked"
+    | "paid"
+    | "booking"
+    | "pending"
+    | "confirmed"
+    | "cancel_requested"
+    | "cancelled"
+    | "failed"
+    | "unknown";
+  currency: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  confirmation_code: string | null;
+  checkin: string | null;
+  checkout: string | null;
+  ticket_deadline: string | null;
+  cancellation_fee: number | null;
+  refund_amount: number | null;
+  metadata: Json;
+  last_reconciled_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProviderBookingInsert = {
+  id?: string;
+  booking_id: string;
+  user_id: string;
+  trip_id: string;
+  provider?: "liteapi";
+  booking_type: ProviderBookingRow["booking_type"];
+  offer_id: string;
+  prebook_id?: string | null;
+  client_reference: string;
+  provider_booking_id?: string | null;
+  provider_status?: string | null;
+  state?: ProviderBookingRow["state"];
+  currency: string;
+  subtotal: number;
+  tax?: number;
+  total: number;
+  confirmation_code?: string | null;
+  checkin?: string | null;
+  checkout?: string | null;
+  ticket_deadline?: string | null;
+  cancellation_fee?: number | null;
+  refund_amount?: number | null;
+  metadata?: Json;
+};
+
+export type ProviderBookingUpdate = Partial<
+  Omit<
+    ProviderBookingRow,
+    "id" | "booking_id" | "user_id" | "trip_id" | "created_at"
+  >
+>;
 
 export type TableDefinition<Row, Insert, Update> = {
   Row: Row;
@@ -508,6 +581,11 @@ type CoreTables = {
       >
     >
   >;
+  provider_bookings: TableDefinition<
+    ProviderBookingRow,
+    ProviderBookingInsert,
+    ProviderBookingUpdate
+  >;
   payments: TableDefinition<
     PaymentRow,
     {
@@ -569,6 +647,8 @@ export type SourceReference =
   Database["public"]["Tables"]["source_references"]["Row"];
 export type Booking = Database["public"]["Tables"]["bookings"]["Row"];
 export type Payment = Database["public"]["Tables"]["payments"]["Row"];
+export type ProviderBooking =
+  Database["public"]["Tables"]["provider_bookings"]["Row"];
 export type {
   EventDiscoveryRunRow,
   SourceRow,
