@@ -14,6 +14,10 @@ import {
   type ProviderAttemptInput,
 } from "../repositories/liteapi-booking-repository.js";
 import type { Booking, ProviderBooking } from "../supabase/database.types.js";
+import {
+  TripBookingLinkService,
+  type FlightSchedule,
+} from "./trip-booking-link-service.js";
 
 function providerFailure(error: unknown): boolean {
   return (
@@ -54,10 +58,14 @@ export interface FlightPrebookResult extends ProviderAttemptResult {
 }
 
 export class LiteApiBookingService {
+  private readonly linker: TripBookingLinkService;
+
   public constructor(
     private readonly repository: LiteApiBookingRepository,
     private readonly client: LiteApiClient,
-  ) {}
+  ) {
+    this.linker = new TripBookingLinkService(repository);
+  }
 
   public async prebookHotel(input: {
     userId: string;
@@ -106,6 +114,8 @@ export class LiteApiBookingService {
     purpose: "BUSINESS" | "LEISURE";
     contact: Person & { phone_country_code: string; phone_number: string };
     passengers: FlightPassenger[];
+    /** What the traveller saw, kept so the itinerary can show the real times. */
+    schedule?: FlightSchedule | undefined;
   }): Promise<FlightPrebookResult> {
     // The provider asks for a verify before every prebook so the price the
     // guest is about to pay is the price the airline will honour.
@@ -130,7 +140,26 @@ export class LiteApiBookingService {
     const providerBooking = await this.repository.updateProviderBooking(
       created.providerBooking.id,
       input.tripId,
-      { provider_status: "PREBOOKED", state: "prebooked" },
+      {
+        provider_status: "PREBOOKED",
+        state: "prebooked",
+        metadata: input.schedule
+          ? {
+              schedule: {
+                segments: input.schedule.segments.map((segment) => ({
+                origin_code: segment.origin_code,
+                origin_name: segment.origin_name,
+                destination_code: segment.destination_code,
+                destination_name: segment.destination_name,
+                departs_at: segment.departs_at,
+                arrives_at: segment.arrives_at,
+                carrier_name: segment.carrier_name,
+                flight_number: segment.flight_number,
+                })),
+              },
+            }
+          : {},
+      },
     );
     return {
       kind: "flight",
@@ -306,6 +335,12 @@ export class LiteApiBookingService {
           total: provider.total.amount,
         },
       );
+      await this.linker.linkFlight({
+        tripId: input.tripId,
+        booking,
+        providerBooking,
+        schedule: scheduleFromMetadata(providerBooking.metadata),
+      });
       return { booking, provider_booking: providerBooking, provider };
     } catch (error) {
       await this.repository.updateProviderBooking(attempt.id, input.tripId, {
@@ -459,6 +494,10 @@ export class LiteApiBookingService {
         cancelled_at: new Date().toISOString(),
       },
     );
+    await this.linker.release({
+      tripId: input.tripId,
+      providerBookingId: input.providerBookingId,
+    });
     return { booking, provider_booking: updated, provider };
   }
 
@@ -487,6 +526,10 @@ export class LiteApiBookingService {
         refund_amount: provider.refund.amount,
       },
     );
+    await this.linker.release({
+      tripId: input.tripId,
+      providerBookingId: input.providerBookingId,
+    });
     return {
       booking: await this.repository.getLocalBooking(
         attempt.booking_id,
@@ -564,3 +607,39 @@ export class LiteApiBookingService {
     }
   }
 }
+
+/** The schedule snapshot taken at prebook, if the traveller's search had one. */
+function scheduleFromMetadata(metadata: unknown): FlightSchedule | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const schedule = (metadata as Record<string, unknown>).schedule;
+  if (!schedule || typeof schedule !== "object") return null;
+  const segments = (schedule as { segments?: unknown }).segments;
+  if (!Array.isArray(segments) || segments.length === 0) return null;
+  const parsed: FlightSchedule["segments"] = [];
+  for (const entry of segments) {
+    if (!entry || typeof entry !== "object") return null;
+    const segment = entry as Record<string, unknown>;
+    if (
+      typeof segment.origin_code !== "string" ||
+      typeof segment.destination_code !== "string" ||
+      typeof segment.departs_at !== "string" ||
+      typeof segment.arrives_at !== "string" ||
+      typeof segment.carrier_name !== "string" ||
+      typeof segment.flight_number !== "string"
+    )
+      return null;
+    parsed.push({
+      origin_code: segment.origin_code,
+      origin_name: typeof segment.origin_name === "string" ? segment.origin_name : null,
+      destination_code: segment.destination_code,
+      destination_name:
+        typeof segment.destination_name === "string" ? segment.destination_name : null,
+      departs_at: segment.departs_at,
+      arrives_at: segment.arrives_at,
+      carrier_name: segment.carrier_name,
+      flight_number: segment.flight_number,
+    });
+  }
+  return { segments: parsed };
+}
+

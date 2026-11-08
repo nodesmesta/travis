@@ -387,6 +387,7 @@ export default function FlightsView({
   onEnsureTrip,
   onOpenInvoices,
   onOpenBookings,
+  onOpenTrips,
 }: ExploreViewProps) {
   const traveller = useTraveller();
   const [activeTripId, setActiveTripId] = useState<string | null>(null);
@@ -558,6 +559,19 @@ export default function FlightsView({
           phone_number: phone.trim(),
         },
         passengers: [passenger],
+        // The itinerary the traveller picked, so the trip can show the real times.
+        schedule: {
+          segments: selected.segments.map((segment) => ({
+            origin_code: segment.origin_code,
+            origin_name: segment.origin_name,
+            destination_code: segment.destination_code,
+            destination_name: segment.destination_name,
+            departs_at: segment.departs_local,
+            arrives_at: segment.arrives_local,
+            carrier_name: segment.carrier_name,
+            flight_number: segment.flight_number,
+          })),
+        },
       });
       setPrebook(next);
     } catch (caught) {
@@ -989,7 +1003,20 @@ export default function FlightsView({
                 >
                   Invoices
                 </button>
+                {onOpenTrips ? (
+                  <button
+                    className="button accent"
+                    onClick={onOpenTrips}
+                    type="button"
+                  >
+                    Open the trip
+                  </button>
+                ) : null}
               </div>
+              <p className="helper-text">
+                This ticket is on your trip now and stays there until it is
+                cancelled.
+              </p>
             </div>
           ) : null}
         </section>

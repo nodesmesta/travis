@@ -328,7 +328,9 @@ export default function ItineraryView({ trip, contexts }: ViewProps) {
                           ? " · from a recommendation"
                           : item.source === "event_discovery"
                             ? " · from event search"
-                            : ""}
+                            : item.source === "external_provider"
+                              ? " · from your booking"
+                              : ""}
                         {item.metadata.end_time_estimated === true
                           ? " · end time is an estimate"
                           : ""}

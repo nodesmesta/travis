@@ -573,6 +573,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                   onEnsureTrip={ensureTrip}
                   onOpenInvoices={() => showView("invoices")}
                   onOpenBookings={() => showView("bookings")}
+                  onOpenTrips={() => showView("trips")}
                 />
               ) : (
                 <FlightsView
@@ -583,6 +584,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                   onEnsureTrip={ensureTrip}
                   onOpenInvoices={() => showView("invoices")}
                   onOpenBookings={() => showView("bookings")}
+                  onOpenTrips={() => showView("trips")}
                 />
               )}
             </>
