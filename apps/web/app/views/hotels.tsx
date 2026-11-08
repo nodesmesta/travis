@@ -77,6 +77,15 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Hotel request failed.";
 }
 
+interface SearchQuery {
+  city: string;
+  country_code: string;
+  checkin: string;
+  checkout: string;
+  adults: number;
+  currency: string;
+}
+
 type HotelErrors = {
   city?: string;
   country?: string;
@@ -232,6 +241,10 @@ export function HotelDetail({
   const [groups, setGroups] = useState<HotelRateGroup[] | null>(null);
   const [rateCount, setRateCount] = useState(0);
   const [rateError, setRateError] = useState<string | null>(null);
+  // Held in a ref: a caller passing an inline loader must not restart the fetch
+  // on every render.
+  const loadRatesRef = useRef(loadRates);
+  loadRatesRef.current = loadRates;
 
   useEffect(() => {
     let cancelled = false;
@@ -262,7 +275,10 @@ export function HotelDetail({
     setGroups(null);
     setRateCount(0);
     setRateError(null);
-    loadRates(hotel.hotel_id, {
+    // Without both dates and the city the provider cannot price anything; the
+    // rates from the search stand in instead.
+    if (!checkin || !checkout || !hotel.city) return;
+    loadRatesRef.current(hotel.hotel_id, {
       city: hotel.city ?? "",
       country: countryCode,
       checkin,
@@ -286,7 +302,7 @@ export function HotelDetail({
     return () => {
       cancelled = true;
     };
-  }, [hotel.hotel_id, hotel.city, countryCode, checkin, checkout, adults, currency, loadRates]);
+  }, [hotel.hotel_id, hotel.city, countryCode, checkin, checkout, adults, currency]);
 
   return (
     <section className="detail-page">
@@ -361,18 +377,22 @@ export function HotelDetail({
         reviews={reviews}
       />
       <h3 className="detail-subhead">
-        {groups === null
-          ? "Loading every room the provider sells…"
-          : `Choose a room · ${rateCount} ${
+        {groups && groups.length > 0
+          ? `Choose a room · ${rateCount} ${
               rateCount === 1 ? "rate" : "rates"
-            } in ${groups.length} ${groups.length === 1 ? "room" : "rooms"} for these nights`}
+            } in ${groups.length} ${groups.length === 1 ? "room" : "rooms"} for these nights`
+          : !checkin || !checkout || !hotel.city || rateError
+            ? `Choose a room · ${offers.length} ${
+                offers.length === 1 ? "rate" : "rates"
+              } from your search`
+            : "Loading every room the provider sells…"}
       </h3>
       {rateError ? (
         <p className="helper-text" role="status">
           {rateError}
         </p>
       ) : null}
-      {groups ? (
+      {groups && groups.length > 0 ? (
         <div className="room-list">
           {groups.map((group) => (
             <article className="room-card" key={group.key}>
@@ -460,8 +480,9 @@ export function HotelDetail({
           ))}
         </div>
       ) : null}
-      {!groups && !rateError ? (
-        // Until the full list arrives, the rates from the search are still bookable.
+      {!groups || groups.length === 0 ? (
+        // Until the full list arrives — or when it cannot be loaded — the rates from
+        // the search are still bookable, so the room section is never empty.
         <div className="room-list">
           {offers.map((offer) => {
             const reserved = prebookedOfferId === offer.offer_id;
@@ -534,6 +555,11 @@ export default function HotelsView({
   const [nationality, setNationality] = useState("ID");
   const [currency, setCurrency] = useState("USD");
   const [errors, setErrors] = useState<HotelErrors>({});
+  /**
+   * The dates, guests and city the shown results belong to. The form can be edited
+   * while results stay on screen, so the room page must read this and not the form.
+   */
+  const [resultQuery, setResultQuery] = useState<SearchQuery | null>(null);
   // The provider owns the country list; the static one is only a fallback for
   // the moment before it arrives or when it cannot be reached.
   const [countries, setCountries] = useState<PlaceCountry[]>(
@@ -669,18 +695,25 @@ export default function HotelsView({
     try {
       if (!(await cityMatchesCountry())) return;
       const tripId = await requireTrip();
-      setResult(
-        await searchHotels(tripId, {
-          city,
-          country_code: countryCode,
-          checkin,
-          checkout,
-          adults,
-          currency,
-          guest_nationality: nationality,
-          limit: 20,
-        }),
-      );
+      const query = {
+        city,
+        country_code: countryCode,
+        checkin,
+        checkout,
+        adults,
+        currency,
+        guest_nationality: nationality,
+        limit: 20,
+      };
+      setResult(await searchHotels(tripId, query));
+      setResultQuery({
+        city,
+        country_code: countryCode,
+        checkin,
+        checkout,
+        adults,
+        currency,
+      });
     } catch (caught) {
       setError(errorText(caught));
     } finally {
@@ -1028,12 +1061,12 @@ export default function HotelsView({
           ) : null}
           {detail ? (
             <HotelDetail
-              adults={adults}
+              adults={resultQuery?.adults ?? adults}
               busy={prebookingOffer !== null}
-              checkin={checkin}
-              checkout={checkout}
-              countryCode={countryCode}
-              currency={currency}
+              checkin={resultQuery?.checkin ?? checkin}
+              checkout={resultQuery?.checkout ?? checkout}
+              countryCode={resultQuery?.country_code ?? countryCode}
+              currency={resultQuery?.currency ?? currency}
               entry={detail}
               nights={nights}
               onBack={() => setDetail(null)}
