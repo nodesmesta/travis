@@ -80,6 +80,8 @@ export interface FlightJourney {
   segments: FlightSegment[];
   stops: number;
   duration_minutes: number;
+  /** Every fare on sale for this itinerary, cheapest first. `cheapest` is `offers[0]`. */
+  offers: FlightOffer[];
   cheapest: FlightOffer;
 }
 
@@ -117,7 +119,12 @@ export interface HotelOffer {
 }
 
 export interface HotelSearchResult {
-  hotels: Array<{ hotel: HotelStay; cheapest: HotelOffer }>;
+  hotels: Array<{
+    hotel: HotelStay;
+    /** Every room and rate sold for the stay, cheapest first. `cheapest` is `offers[0]`. */
+    offers: HotelOffer[];
+    cheapest: HotelOffer;
+  }>;
   /** How many bookable hotels the provider returned before the limit was applied. */
   total_found: number;
   retrieved_at: string;
@@ -266,9 +273,27 @@ export interface FlightPrebookRequest {
   passengers: FlightPassenger[];
 }
 
+export interface FlightSeat {
+  service_id: string;
+  /** `12C`, as the provider labels it. */
+  seat_number: string;
+  row: number;
+  column: string;
+  /** `window`, `middle`, `aisle`, when the provider states it. */
+  position: string | null;
+  /** `standard`, `extra_legroom`, `exit_row`. */
+  kind: string | null;
+  available: boolean;
+  /** What the seat costs on top of the fare, when the carrier charges for it. */
+  price: Money | null;
+  segment_key: string;
+}
+
 export interface FlightPrebook {
   prebook_id: string;
   total: Money;
+  /** Seats the carrier lets this passenger pick before ticketing. */
+  seats: FlightSeat[];
 }
 
 /** `POST /flights/verify`: the price the provider will honour right before booking. */
@@ -671,7 +696,8 @@ export class LiteApiClient {
         occupancies: [{ adults: request.adults }],
         currency: request.currency,
         guestNationality: request.guest_nationality,
-        maxRatesPerHotel: 1,
+        // More than one rate per hotel: the detail page lists rooms to choose from.
+        maxRatesPerHotel: 5,
         timeout: 12,
       },
     );
@@ -835,6 +861,43 @@ export class LiteApiClient {
     return normalizeFlightPrebook(result);
   }
 
+  /**
+   * `POST /flights/prebooks/{id}/services`: attaches the seats the passenger picked.
+   * The call replaces the previous selection wholesale, so send the full list.
+   */
+  public async attachFlightServices(request: {
+    prebook_id: string;
+    seats: Array<{ passenger_index: number; service_id: string }>;
+  }): Promise<{ total: Money; seat_count: number }> {
+    assertProviderId(request.prebook_id, "prebook id");
+    const selectedServices = request.seats.map((seat, index) => {
+      if (!Number.isInteger(seat.passenger_index) || seat.passenger_index < 0) {
+        throw queryInvalid(
+          `seats[${index}].passenger_index must be a non-negative integer.`,
+        );
+      }
+      if (nonBlankString(seat.service_id) === null) {
+        throw queryInvalid(`seats[${index}].service_id is required.`);
+      }
+      return {
+        passengerIndex: seat.passenger_index,
+        serviceId: seat.service_id,
+        quantity: 1,
+      };
+    });
+    const result = await this.request(
+      "POST",
+      `/flights/prebooks/${encodeURIComponent(request.prebook_id)}/services`,
+      "LiteAPI flight services",
+      { selectedServices },
+    );
+    const data = dataRecord(result, "flight services");
+    return {
+      total: moneyFrom(data.price, data.currency, "flight services price"),
+      seat_count: selectedServices.length,
+    };
+  }
+
   /** `POST /flights/bookings`. Idempotent per prebook id on the provider side. */
   public async bookFlight(request: {
     prebook_id: string;
@@ -921,13 +984,42 @@ function normalizeJourney(value: unknown): FlightJourney {
   }
   const segments = segmentsRaw.map(normalizeSegment);
   const total = asRecord(journey?.totalDuration);
+  const offers = flightOffers(journey);
   return {
     journey_key: required(nonBlankString(journey?.journeyKey), "journeyKey"),
     segments,
     stops: segments.length - 1,
     duration_minutes: nonNegative(total?.minutes, "journey duration"),
-    cheapest: normalizeFlightOffer(journey?.cheapestOffer),
+    offers,
+    cheapest: offers[0] as FlightOffer,
   };
+}
+
+/**
+ * Every fare the journey sells. The provider lists them under `offers`; older
+ * payloads only carry `cheapestOffer`, and a malformed fare is dropped rather
+ * than failing the whole search.
+ */
+function flightOffers(journey: Record<string, unknown> | null): FlightOffer[] {
+  const seen = new Set<string>();
+  const offers: FlightOffer[] = [];
+  for (const entry of Array.isArray(journey?.offers) ? journey.offers : []) {
+    let offer: FlightOffer;
+    try {
+      offer = normalizeFlightOffer(entry);
+    } catch {
+      continue;
+    }
+    if (seen.has(offer.offer_id)) continue;
+    seen.add(offer.offer_id);
+    offers.push(offer);
+  }
+  if (offers.length === 0) {
+    const only = normalizeFlightOffer(journey?.cheapestOffer);
+    offers.push(only);
+  }
+  offers.sort((a, b) => a.total.amount - b.total.amount);
+  return offers;
 }
 
 function normalizeSegment(value: unknown): FlightSegment {
@@ -1002,9 +1094,13 @@ export function normalizeHotelSearch(
     const info = content.get(hotelId);
     // A price with no hotel details cannot be shown honestly. Skip it and say nothing.
     if (!info) continue;
-    const cheapest = cheapestHotelOffer(row);
-    if (!cheapest) continue;
-    hotels.push({ hotel: normalizeHotel(hotelId, info), cheapest });
+    const offers = hotelOffers(row);
+    if (offers.length === 0) continue;
+    hotels.push({
+      hotel: normalizeHotel(hotelId, info),
+      offers,
+      cheapest: offers[0] as HotelOffer,
+    });
   }
   hotels.sort((a, b) => a.cheapest.total.amount - b.cheapest.total.amount);
   const totalFound = hotels.length;
@@ -1053,10 +1149,13 @@ function cancellationUntil(
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function cheapestHotelOffer(
-  row: Record<string, unknown> | null,
-): HotelOffer | null {
-  let best: HotelOffer | null = null;
+/**
+ * Every room and rate sold for the stay, cheapest first. Each room type carries
+ * the offer id the prebook step needs, so two rooms are two bookable options.
+ */
+function hotelOffers(row: Record<string, unknown> | null): HotelOffer[] {
+  const offers: HotelOffer[] = [];
+  const seen = new Set<string>();
   for (const roomEntry of Array.isArray(row?.roomTypes) ? row.roomTypes : []) {
     const roomType = asRecord(roomEntry);
     const offerId = nonBlankString(roomType?.offerId);
@@ -1069,8 +1168,9 @@ function cheapestHotelOffer(
         ? (asRecord(rate?.retailRate)?.total as unknown[])
         : [];
       if (totals.length === 0) continue;
+      if (seen.has(offerId)) continue;
+      seen.add(offerId);
       const total = money(totals[0], "room price");
-      if (best !== null && total.amount >= best.total.amount) continue;
       const policy = asRecord(rate?.cancellationPolicies);
       const tag = nonBlankString(policy?.refundableTag);
       const taxes = Array.isArray(asRecord(rate?.retailRate)?.taxesAndFees)
@@ -1080,7 +1180,7 @@ function cheapestHotelOffer(
         .map(asRecord)
         .filter((tax) => tax?.included === true)
         .reduce((sum, tax) => sum + (finiteNumber(tax?.amount) ?? 0), 0);
-      best = {
+      offers.push({
         offer_id: offerId,
         room_name: required(nonBlankString(rate?.name), "room name"),
         board_name: nonBlankString(rate?.boardName),
@@ -1093,10 +1193,11 @@ function cheapestHotelOffer(
               ? "non_refundable"
               : "unknown",
         free_cancellation_until: cancellationUntil(policy),
-      };
+      });
     }
   }
-  return best;
+  offers.sort((a, b) => a.total.amount - b.total.amount);
+  return offers;
 }
 
 // ---------------------------------------------------------------------------
@@ -1215,7 +1316,70 @@ export function normalizeFlightPrebook(result: ProviderJson): FlightPrebook {
   return {
     prebook_id: required(nonBlankString(data.prebookId), "prebookId"),
     total: moneyFrom(data.price, data.currency, "prebook price"),
+    seats: flightSeats(data),
   };
+}
+
+/** Seat services from `servicesAttachable`; baggage and others are ignored here. */
+function flightSeats(data: Record<string, unknown>): FlightSeat[] {
+  const groups = asRecord(data.servicesAttachable)?.groups;
+  const seats: FlightSeat[] = [];
+  for (const groupEntry of Array.isArray(groups) ? groups : []) {
+    const group = asRecord(groupEntry);
+    if (nonBlankString(group?.category)?.toLowerCase() !== "seat") continue;
+    for (const serviceEntry of Array.isArray(group?.services)
+      ? group.services
+      : []) {
+      const service = asRecord(serviceEntry);
+      const serviceId = nonBlankString(service?.serviceId);
+      const seat = asRecord(asRecord(service?.metadata)?.seat);
+      const name = nonBlankString(service?.name) ?? "";
+      const row = finiteNumber(seat?.seatRow) ?? rowFromName(name);
+      const column =
+        nonBlankString(seat?.seatColumn) ?? columnFromName(name) ?? null;
+      if (!serviceId || row === null || column === null) continue;
+      const display = asRecord(asRecord(service?.pricing)?.display);
+      const amount = finiteNumber(display?.amount);
+      const currency = nonBlankString(display?.currency);
+      seats.push({
+        service_id: serviceId,
+        seat_number:
+          nonBlankString(seat?.seatNumber) ?? `${row}${column.toUpperCase()}`,
+        row,
+        column: column.toUpperCase(),
+        position: nonBlankString(seat?.position),
+        kind: nonBlankString(seat?.seatType),
+        available: seat?.available !== false,
+        price:
+          amount !== null && amount > 0 && currency !== null
+            ? { amount, currency }
+            : null,
+        segment_key: nonBlankString(service?.segmentKey) ?? "",
+      });
+    }
+  }
+  seats.sort(
+    (a, b) => a.row - b.row || a.column.localeCompare(b.column),
+  );
+  return seats;
+}
+
+/** `Seat 12C` → 12, for carriers that send no seat metadata. */
+function rowFromName(name: string): number | null {
+  for (let index = 0; index < name.length; index += 1) {
+    const char = name.charAt(index);
+    if (char < "0" || char > "9") continue;
+    const value = Number.parseInt(name.slice(index), 10);
+    return Number.isNaN(value) ? null : value;
+  }
+  return null;
+}
+
+/** `Seat 12C` → `C`, for carriers that send no seat metadata. */
+function columnFromName(name: string): string | null {
+  const trimmed = name.trim();
+  const last = trimmed.charAt(trimmed.length - 1);
+  return last >= "A" && last <= "Z" ? last : null;
 }
 
 export function normalizeFlightVerification(

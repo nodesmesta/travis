@@ -39,7 +39,12 @@ export interface HotelOffer {
   free_cancellation_until: string | null;
 }
 export interface HotelSearchResponse {
-  hotels: Array<{ hotel: HotelStay; cheapest: HotelOffer }>;
+  hotels: Array<{
+    hotel: HotelStay;
+    /** Every room and rate sold for the stay, cheapest first. */
+    offers: HotelOffer[];
+    cheapest: HotelOffer;
+  }>;
   total_found?: number;
   retrieved_at: string;
   provider_request_id: string | null;
@@ -87,6 +92,8 @@ export interface FlightJourney {
   segments: FlightSegment[];
   stops: number;
   duration_minutes: number;
+  /** Every fare on sale for this itinerary, cheapest first. */
+  offers: FlightOffer[];
   cheapest: FlightOffer;
 }
 export interface FlightSearchResponse {
@@ -137,9 +144,21 @@ export interface FlightOfferVerificationView {
   messages: string[];
   verified_at: string;
 }
+export interface FlightSeat {
+  service_id: string;
+  seat_number: string;
+  row: number;
+  column: string;
+  position: string | null;
+  kind: string | null;
+  available: boolean;
+  price: HotelMoney | null;
+  segment_key: string;
+}
+
 export interface FlightPrebookAttempt extends ProviderAttemptResponse {
   kind: "flight";
-  prebook: { prebook_id: string; total: HotelMoney };
+  prebook: { prebook_id: string; total: HotelMoney; seats?: FlightSeat[] };
   verification?: FlightOfferVerificationView;
 }
 export interface ProviderActionResponse extends ProviderAttemptResponse {
@@ -227,6 +246,23 @@ export function prebookFlight(
 ): Promise<FlightPrebookAttempt> {
   return providerRequest(`${trip(tripId)}/flights/prebook`, body, true);
 }
+/** Attaches the seats the passenger picked; the totals move with them. */
+export function attachFlightSeats(
+  tripId: string,
+  providerBookingId: string,
+  seats: Array<{ passenger_index: number; service_id: string }>,
+): Promise<{
+  total: HotelMoney;
+  seat_count: number;
+  provider_booking: ProviderBookingView;
+}> {
+  return providerRequest(
+    `${trip(tripId)}/flights/${encodeURIComponent(providerBookingId)}/services`,
+    { seats },
+    true,
+  );
+}
+
 export function bookFlight(
   tripId: string,
   providerBookingId: string,

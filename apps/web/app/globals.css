@@ -2731,3 +2731,233 @@ body {
   font-weight: 700;
   text-align: center;
 }
+
+/* ---------- Clickable result rows and detail pages ----------
+   A hotel or flight row opens its detail page; the room and fare rows on that
+   page carry the real action button, so only those rows stay unclickable. */
+
+.result-row {
+  position: relative;
+  cursor: pointer;
+}
+
+.result-row:hover {
+  border-color: rgba(49, 46, 129, 0.35);
+  box-shadow: 0 6px 20px rgba(20, 20, 43, 0.06);
+}
+
+.result-open {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.result-open:focus-visible {
+  outline: 3px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.result-row.room {
+  cursor: default;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.result-row.room:hover {
+  box-shadow: none;
+  border-color: var(--border);
+}
+
+.tag.indigo {
+  background: #eef1ff;
+  color: var(--indigo-dark);
+}
+
+.detail-page {
+  display: grid;
+  gap: 14px;
+}
+
+.detail-back {
+  justify-self: start;
+}
+
+.detail-hero {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.detail-hero.flight {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.detail-photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e8ecff, #f7f2e7);
+}
+
+.detail-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detail-info h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.detail-subhead {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.room-list {
+  display: grid;
+  gap: 10px;
+}
+
+.segment-timeline {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.segment-timeline li {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 130px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fafbff;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.segment-timeline li strong {
+  color: var(--indigo-dark);
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .detail-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-photo {
+    min-height: 180px;
+  }
+
+  .segment-timeline li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+/* ---------- Flight seat picker ----------
+   Built from the seats the carrier attaches to the prebook; the number in a seat
+   is its extra charge, so the traveller sees the price before paying. */
+
+.seat-map {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: #fafbff;
+}
+
+.seat-map-head {
+  display: grid;
+  gap: 2px;
+}
+
+.seat-map-head .eyebrow {
+  margin: 0;
+}
+
+.seat-grid {
+  display: grid;
+  gap: 4px;
+  align-items: center;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.seat-column {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.seat-row {
+  padding-right: 4px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.seat {
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.seat:hover:not(:disabled) {
+  border-color: var(--indigo);
+}
+
+.seat.selected {
+  border-color: var(--indigo);
+  background: var(--indigo);
+  color: white;
+}
+
+.seat.taken {
+  border-color: transparent;
+  background: #eceef4;
+  color: #b9bcc9;
+  cursor: not-allowed;
+}
+
+.seat.legroom:not(.taken):not(.selected) {
+  border-color: #c9b28a;
+  background: #fdf8ef;
+}
+
+.seat-gap {
+  display: block;
+}
