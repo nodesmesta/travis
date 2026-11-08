@@ -340,6 +340,68 @@ export class LiteApiBookingService {
     );
   }
 
+  /**
+   * Attaches the seats the passenger picked to the provider prebook and keeps our
+   * totals in step, so the payment step charges what the carrier now expects.
+   */
+  public async attachFlightSeats(input: {
+    userId: string;
+    tripId: string;
+    providerBookingId: string;
+    seats: Array<{ passenger_index: number; service_id: string }>;
+  }): Promise<{
+    total: { amount: number; currency: string };
+    seat_count: number;
+    booking: Booking;
+    provider_booking: ProviderBooking;
+  }> {
+    const attempt = await this.requireAttempt(input);
+    if (attempt.booking_type !== "flight" || !attempt.prebook_id) {
+      throw new AppError(
+        "PROVIDER_BOOKING_NOT_READY",
+        "conflict",
+        409,
+        "This is not a prebooked flight.",
+      );
+    }
+    if (attempt.state === "confirmed") {
+      throw new AppError(
+        "PROVIDER_BOOKING_ALREADY_FINAL",
+        "conflict",
+        409,
+        "Seats cannot change after the ticket was issued.",
+      );
+    }
+    const result = await this.client.attachFlightServices({
+      prebook_id: attempt.prebook_id,
+      seats: input.seats,
+    });
+    const providerBooking = await this.repository.updateProviderBooking(
+      attempt.id,
+      input.tripId,
+      {
+        currency: result.total.currency,
+        subtotal: result.total.amount,
+        total: result.total.amount,
+      },
+    );
+    const booking = await this.repository.updateLocalBooking(
+      attempt.booking_id,
+      input.tripId,
+      {
+        currency: result.total.currency,
+        subtotal: result.total.amount,
+        total: result.total.amount,
+      },
+    );
+    return {
+      total: result.total,
+      seat_count: result.seat_count,
+      booking,
+      provider_booking: providerBooking,
+    };
+  }
+
   public async getFlight(input: { tripId: string; providerBookingId: string }) {
     const attempt = await this.requireAttempt(input);
     if (attempt.booking_type !== "flight" || !attempt.provider_booking_id) {

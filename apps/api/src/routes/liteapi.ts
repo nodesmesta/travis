@@ -273,6 +273,48 @@ function parseHotelBook(body: unknown): {
   return { holder, guests };
 }
 
+function parseFlightSeats(body: unknown): Array<{
+  passenger_index: number;
+  service_id: string;
+}> {
+  const input = bodyRecord(body);
+  only(input, ["seats"], "flight seats");
+  if (!Array.isArray(input.seats) || input.seats.length > 9)
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "seats must be an array of at most 9 entries.",
+    );
+  return input.seats.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new AppError(
+        "REQUEST_INVALID",
+        "validation",
+        400,
+        `seats[${index}] must be an object.`,
+      );
+    const seat = entry as Record<string, unknown>;
+    only(seat, ["passenger_index", "service_id"], `seats[${index}]`);
+    const passengerIndex = seat.passenger_index;
+    if (
+      typeof passengerIndex !== "number" ||
+      !Number.isInteger(passengerIndex) ||
+      passengerIndex < 0
+    )
+      throw new AppError(
+        "REQUEST_INVALID",
+        "validation",
+        400,
+        `seats[${index}].passenger_index must be a non-negative integer.`,
+      );
+    return {
+      passenger_index: passengerIndex,
+      service_id: nestedString(seat, "service_id", `seats[${index}].service_id`),
+    };
+  });
+}
+
 function parseFlightPrebook(body: unknown): {
   offer_id: string;
   purpose: "BUSINESS" | "LEISURE";
@@ -517,6 +559,10 @@ export const liteApiRoutes: RouteModule = async (context) => {
     url.pathname,
     `${TRIPS}/:tripId/flights/:providerBookingId/cancel`,
   );
+  const flightServices = matchPath(
+    url.pathname,
+    `${TRIPS}/:tripId/flights/:providerBookingId/services`,
+  );
   if (
     !hotelSearch &&
     !flightSearch &&
@@ -527,7 +573,8 @@ export const liteApiRoutes: RouteModule = async (context) => {
     !hotelDetail &&
     !flightDetail &&
     !hotelCancel &&
-    !flightCancel
+    !flightCancel &&
+    !flightServices
   )
     return false;
   const session = await context.authenticate();
@@ -679,6 +726,35 @@ export const liteApiRoutes: RouteModule = async (context) => {
     });
     return true;
   }
+  if (flightServices && method === "POST") {
+    const ownerTripId = await ownedTrip(context, flightServices.tripId, session);
+    limit(context, prebookLimiter, session.user.id, "flight-services");
+    const body = await readJsonBody(request);
+    const seats = parseFlightSeats(body);
+    const result = await executeIdempotent(
+      session,
+      context,
+      `liteapi.flight-services:${flightServices.providerBookingId}`,
+      body,
+      () =>
+        makeService(context, session).attachFlightSeats({
+          userId: session.user.id,
+          tripId: ownerTripId,
+          providerBookingId: pathId(
+            flightServices.providerBookingId,
+            "Provider booking",
+          ),
+          seats,
+        }),
+    );
+    writeJson(context.response, 200, {
+      ...result,
+      trip_id: ownerTripId,
+      request_id: requestId,
+    });
+    return true;
+  }
+
   if (hotelDetail && method === "GET") {
     const ownerTripId = await ownedTrip(context, hotelDetail.tripId, session);
     const result = await makeService(context, session).getHotel({

@@ -70,25 +70,22 @@ type HotelErrors = {
 export function HotelRow({
   hotel,
   nights,
-  selected,
-  busy,
-  onPrebook,
+  onOpen,
 }: {
   hotel: HotelSearchResponse["hotels"][number];
   nights: number;
-  selected: boolean;
-  busy: boolean;
-  onPrebook: (offer: HotelOffer) => void;
+  onOpen: () => void;
 }) {
-  const { hotel: details, cheapest } = hotel;
-  const refundable =
-    cheapest.refundable === "refundable"
-      ? "Refundable"
-      : cheapest.refundable === "non_refundable"
-        ? "Non-refundable"
-        : "Cancellation policy unavailable";
+  const { hotel: details, cheapest, offers } = hotel;
   return (
-    <article className={`result-row ${selected ? "selected" : ""}`}>
+    <article className="result-row">
+      {/* The whole card opens the hotel, like the photo and name do on a travel site. */}
+      <button
+        aria-label={`Open ${details.name}`}
+        className="result-open"
+        onClick={onOpen}
+        type="button"
+      />
       <div className="result-media">
         {details.photo_url ? (
           // Provider photos are hot-linked; a broken one falls back to the panel.
@@ -107,38 +104,161 @@ export function HotelRow({
           ) : null}
         </div>
         <p className="event-meta">
-          <span>⌖</span>{" "}
-          {details.address ?? details.city ?? "Location unavailable"}
+          <span>⌖</span> {details.address ?? details.city ?? "Location unavailable"}
         </p>
         <p className="event-meta">
-          <span>▣</span> {cheapest.room_name}
+          <span>▣</span> {cheapest.room_name} ·{" "}
+          {offers.length === 1 ? "1 room" : `${offers.length} rooms`}
         </p>
         <div className="result-tags">
-          <span>{cheapest.board_name ?? "Board details unavailable"}</span>
-          <span>{refundable}</span>
           {details.rating ? (
             <span>
               Rating {details.rating}
               {details.review_count ? ` · ${details.review_count} reviews` : ""}
             </span>
           ) : null}
+          {cheapest.board_name ? <span>{cheapest.board_name}</span> : null}
+          {cheapest.refundable === "refundable" ? (
+            <span>Refundable</span>
+          ) : null}
         </div>
       </div>
       <div className="result-price">
         <span className="result-price-label">
-          {nights > 1 ? `Total · ${nights} nights` : "Total"}
+          {nights > 1 ? `From · ${nights} nights` : "From"}
         </span>
         <strong>{money(cheapest.total)}</strong>
-        <button
-          className={`button ${selected ? "secondary" : "accent"} wide`}
-          disabled={busy || selected}
-          onClick={() => onPrebook(cheapest)}
-          type="button"
-        >
-          {selected ? "Rate reserved" : busy ? "Reserving…" : "Reserve"}
-        </button>
+        <span className="button secondary wide">View rooms</span>
       </div>
     </article>
+  );
+}
+
+function refundLabel(offer: HotelOffer): string {
+  if (offer.refundable === "refundable") {
+    return offer.free_cancellation_until
+      ? `Free cancellation until ${offer.free_cancellation_until.slice(0, 10)}`
+      : "Refundable";
+  }
+  if (offer.refundable === "non_refundable") return "Non-refundable";
+  return "Cancellation policy unavailable";
+}
+
+/**
+ * The hotel page: the photo and details from the result, then every room sold for
+ * the stay so the traveller picks the rate here rather than in the list.
+ */
+export function HotelDetail({
+  entry,
+  nights,
+  checkin,
+  checkout,
+  adults,
+  busy,
+  prebookedOfferId,
+  onBack,
+  onReserve,
+}: {
+  entry: HotelSearchResponse["hotels"][number];
+  nights: number;
+  checkin: string;
+  checkout: string;
+  adults: number;
+  busy: boolean;
+  prebookedOfferId: string | null;
+  onBack: () => void;
+  onReserve: (offer: HotelOffer) => void;
+}) {
+  const { hotel, offers } = entry;
+  return (
+    <section className="detail-page">
+      <button className="button ghost detail-back" onClick={onBack} type="button">
+        ← Back to results
+      </button>
+      <div className="detail-hero">
+        <div className="detail-photo">
+          {hotel.photo_url ? (
+            <img alt={hotel.name} src={hotel.photo_url} />
+          ) : (
+            <span aria-hidden="true" className="result-media-fallback">
+              {hotel.name.slice(0, 1)}
+            </span>
+          )}
+        </div>
+        <div className="detail-info">
+          <div className="result-title">
+            <h2>{hotel.name}</h2>
+            {hotel.stars ? (
+              <span className="tag sage">{hotel.stars} stars</span>
+            ) : null}
+          </div>
+          <p className="event-meta">
+            <span>⌖</span> {hotel.address ?? hotel.city ?? "Location unavailable"}
+          </p>
+          <p className="event-meta">
+            <span>▦</span> {checkin} → {checkout} · {nights}{" "}
+            {nights === 1 ? "night" : "nights"} · {adults}{" "}
+            {adults === 1 ? "adult" : "adults"}
+          </p>
+          {hotel.rating ? (
+            <p className="event-meta">
+              <span>★</span> Rating {hotel.rating}
+              {hotel.review_count
+                ? ` · ${hotel.review_count} reviews`
+                : ""}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <h3 className="detail-subhead">
+        Choose a room ·{" "}
+        {offers.length === 1 ? "1 rate" : `${offers.length} rates`} for these
+        nights
+      </h3>
+      <div className="room-list">
+        {offers.map((offer) => {
+          const reserved = prebookedOfferId === offer.offer_id;
+          return (
+            <article className="result-row room" key={offer.offer_id}>
+              <div className="result-body">
+                <div className="result-title">
+                  <h3>{offer.room_name}</h3>
+                  {offer.board_name ? (
+                    <span className="tag indigo">{offer.board_name}</span>
+                  ) : null}
+                </div>
+                <div className="result-tags">
+                  <span>{refundLabel(offer)}</span>
+                  {offer.taxes_included !== null ? (
+                    <span>
+                      Taxes included{" "}
+                      {money({
+                        amount: offer.taxes_included,
+                        currency: offer.total.currency,
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="result-price">
+                <span className="result-price-label">
+                  {nights > 1 ? `Total · ${nights} nights` : "Total"}
+                </span>
+                <strong>{money(offer.total)}</strong>
+                <button
+                  className={`button ${reserved ? "secondary" : "accent"} wide`}
+                  disabled={busy || reserved}
+                  onClick={() => onReserve(offer)}
+                  type="button"
+                >
+                  {reserved ? "Rate reserved" : busy ? "Reserving…" : "Reserve"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -170,6 +290,9 @@ export default function HotelsView({
   const [holderEmail, setHolderEmail] = useState("");
   const [holderPhone, setHolderPhone] = useState("");
   const [result, setResult] = useState<HotelSearchResponse | null>(null);
+  const [detail, setDetail] = useState<
+    HotelSearchResponse["hotels"][number] | null
+  >(null);
   const [prebook, setPrebook] = useState<HotelPrebookAttempt | null>(null);
   const [booked, setBooked] = useState<ProviderActionResponse | null>(null);
   const [prebookedOfferId, setPrebookedOfferId] = useState<string | null>(null);
@@ -193,6 +316,7 @@ export default function HotelsView({
     setCheckin(start);
     setCheckout(end > start ? end : dateFromToday(2));
     setResult(null);
+    setDetail(null);
     setPrebook(null);
     setBooked(null);
     setPrebookedOfferId(null);
@@ -284,6 +408,7 @@ export default function HotelsView({
     if (!validate()) return;
     setBusy(true);
     setError(null);
+    setDetail(null);
     setPrebook(null);
     setBooked(null);
     setPrebookedOfferId(null);
@@ -307,6 +432,14 @@ export default function HotelsView({
     } finally {
       setBusy(false);
     }
+  }
+
+  function openHotel(entry: HotelSearchResponse["hotels"][number]) {
+    setDetail(entry);
+    setPrebook(null);
+    setBooked(null);
+    setPrebookedOfferId(null);
+    setError(null);
   }
 
   async function reserve(offer: HotelOffer) {
@@ -639,26 +772,38 @@ export default function HotelsView({
               </div>
             </div>
           ) : null}
-          {result.hotels.length === 0 ? (
+          {detail ? (
+            <HotelDetail
+              adults={adults}
+              busy={prebookingOffer !== null}
+              checkin={checkin}
+              checkout={checkout}
+              entry={detail}
+              nights={nights}
+              onBack={() => setDetail(null)}
+              onReserve={(offer) => void reserve(offer)}
+              prebookedOfferId={prebookedOfferId}
+            />
+          ) : null}
+          {!detail && result.hotels.length === 0 ? (
             <div className="empty-state">
               <span className="panel-icon">⌕</span>
               <h3>No hotel rates found</h3>
               <p>Try another date range, city, or country.</p>
             </div>
-          ) : (
+          ) : null}
+          {!detail && result.hotels.length > 0 ? (
             <div className="result-list">
               {result.hotels.map((entry) => (
                 <HotelRow
                   hotel={entry}
                   nights={nights}
                   key={entry.cheapest.offer_id}
-                  selected={prebookedOfferId === entry.cheapest.offer_id}
-                  busy={prebookingOffer !== null}
-                  onPrebook={(offer) => void reserve(offer)}
+                  onOpen={() => openHotel(entry)}
                 />
               ))}
             </div>
-          )}
+          ) : null}
         </section>
       ) : null}
     </div>
