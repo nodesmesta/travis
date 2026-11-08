@@ -12,9 +12,6 @@ import { searchCities } from "../../lib/api-liteapi";
  */
 const suggestionCache = new Map<string, { cities: string[]; total: number }>();
 
-/** Above this many cities the menu asks for a few letters before listing. */
-const LIST_ALL_BELOW = 40;
-
 export type CityLookup = (
   country: string,
   query: string,
@@ -27,6 +24,7 @@ export function CityPicker({
   onChange,
   error,
   disabled = false,
+  pinned,
   lookup,
 }: {
   country: string;
@@ -35,6 +33,8 @@ export function CityPicker({
   onChange: (value: string) => void;
   error?: string | null | undefined;
   disabled?: boolean | undefined;
+  /** Well-known cities floated to the top of the unfiltered list. */
+  pinned?: string[] | undefined;
   /** Tests and previews replace the network call; production uses the API. */
   lookup?: CityLookup | undefined;
 }) {
@@ -44,8 +44,12 @@ export function CityPicker({
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [active, setActive] = useState(-1);
+  // The menu opens with a browsable slice and can grow on demand.
+  const [limit, setLimit] = useState(60);
+  // Opening the list shows the country's cities again; only typing filters them.
+  const [typed, setTyped] = useState(false);
   const listId = useId();
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   // A new country means a new city list: drop what the last one returned.
   useEffect(() => {
@@ -53,20 +57,21 @@ export function CityPicker({
     setTotal(0);
     setNote(null);
     setActive(-1);
+    setLimit(60);
     setOpen(false);
   }, [country]);
 
   useEffect(() => {
     if (!open || disabled || !country) return;
-    const query = value.trim();
-    const key = `${country}:${query.toLowerCase()}`;
+    const query = typed ? value.trim() : "";
+    const key = `${country}:${query.toLowerCase()}:${limit}:${(pinned ?? []).join("|")}`;
     const cached = suggestionCache.get(key);
     if (cached) {
-      setOptions(cached.total > LIST_ALL_BELOW && !query ? [] : cached.cities);
+      setOptions(cached.cities);
       setTotal(cached.total);
       setNote(
-        cached.total > LIST_ALL_BELOW && !query
-          ? `${cached.total.toLocaleString("en-US")} cities in ${countryName} — type a few letters.`
+        cached.total === 0
+          ? `No city in ${countryName} matches “${query}”.`
           : null,
       );
       return;
@@ -74,7 +79,12 @@ export function CityPicker({
     const load: CityLookup =
       lookup ??
       ((code: string, text: string) =>
-        searchCities(code, text).then((result) => ({
+        searchCities(
+          code,
+          text,
+          text.trim() ? 40 : limit,
+          text.trim() ? [] : (pinned ?? []),
+        ).then((result) => ({
           cities: result.cities,
           total: result.total,
         })));
@@ -87,14 +97,11 @@ export function CityPicker({
             if (cancelled) return;
             suggestionCache.set(key, result);
             setTotal(result.total);
-            const hidden = result.total > LIST_ALL_BELOW && query.length === 0;
-            setOptions(hidden ? [] : result.cities);
+            setOptions(result.cities);
             setNote(
-              hidden
-                ? `${result.total.toLocaleString("en-US")} cities in ${countryName} — type a few letters.`
-                : result.total === 0
-                  ? `No city in ${countryName} matches “${query}”.`
-                  : null,
+              result.total === 0
+                ? `No city in ${countryName} matches “${query}”.`
+                : null,
             );
           })
           .catch((caught: unknown) => {
@@ -116,12 +123,25 @@ export function CityPicker({
     return () => {
       cancelled = true;
       clearTimeout(timer);
-      if (blurTimer.current) clearTimeout(blurTimer.current);
     };
-  }, [open, country, countryName, value, disabled, lookup]);
+  }, [open, country, countryName, value, typed, disabled, limit, pinned, lookup]);
+
+  // Closing on pointer-down outside the component keeps clicks inside the menu
+  // (options, "show more") from being mistaken for a blur.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && rootRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   function choose(city: string) {
     onChange(city);
+    setTyped(false);
     setOpen(false);
     setActive(-1);
   }
@@ -134,22 +154,24 @@ export function CityPicker({
       setActive((current) => {
         const step = event.key === "ArrowDown" ? 1 : -1;
         const next = current + step;
-        if (next < 0) return options.length - 1;
-        if (next >= options.length) return 0;
+        if (next < 0) return display.length - 1;
+        if (next >= display.length) return 0;
         return next;
       });
       return;
     }
-    if (event.key === "Enter" && open && active >= 0 && options[active]) {
+    if (event.key === "Enter" && open && active >= 0 && display[active]) {
       event.preventDefault();
-      choose(options[active] as string);
+      choose(display[active] as string);
       return;
     }
     if (event.key === "Escape") setOpen(false);
   }
 
+  const display = options.slice(0, limit);
+
   return (
-    <div className="city-picker">
+    <div className="city-picker" ref={rootRef}>
       <input
         aria-autocomplete="list"
         aria-controls={listId}
@@ -158,17 +180,21 @@ export function CityPicker({
         autoComplete="off"
         disabled={disabled}
         onChange={(event) => {
+          setTyped(true);
           onChange(event.target.value);
           setOpen(true);
         }}
         // Clicking an already focused input must reopen the list after a country
         // change closed it, so opening is bound to click as well as focus.
-        onClick={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        onBlur={() => {
-          blurTimer.current = setTimeout(() => setOpen(false), 120);
+        onClick={() => {
+          setTyped(false);
+          setOpen(true);
         }}
+        onFocus={() => {
+          setTyped(false);
+          setOpen(true);
+        }}
+        onKeyDown={onKeyDown}
         placeholder={country ? "Type a city" : "Choose a country first"}
         role="combobox"
         value={value}
@@ -181,7 +207,7 @@ export function CityPicker({
           {!loading && !note && options.length === 0 ? (
             <p className="city-note">No city found.</p>
           ) : null}
-          {options.map((city, index) => (
+          {display.map((city, index) => (
             <button
               aria-selected={index === active}
               className={`city-option ${index === active ? "active" : ""} ${
@@ -199,10 +225,17 @@ export function CityPicker({
             </button>
           ))}
           {!loading && total > options.length && options.length > 0 ? (
-            <p className="city-note">
-              Showing {options.length} of {total.toLocaleString("en-US")} — keep
-              typing to narrow it down.
-            </p>
+            <button
+              className="city-more"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                setLimit((current) => Math.min(current + 140, 500));
+              }}
+              type="button"
+            >
+              Show more — {total.toLocaleString("en-US")} cities in{" "}
+              {countryName}
+            </button>
           ) : null}
         </div>
       ) : null}

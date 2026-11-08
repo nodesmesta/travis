@@ -22,6 +22,7 @@ import {
   providerStateTone,
 } from "./provider-booking-parts";
 import {
+  CITIES,
   COUNTRIES,
   CURRENCIES,
   countryLabel,
@@ -397,6 +398,9 @@ export default function HotelsView({
               countryName={countryName}
               disabled={!countryCode}
               onChange={setCity}
+              pinned={CITIES.filter((item) => item.country === countryCode).map(
+                (item) => item.name,
+              )}
               value={city}
             />
           </SearchField>
