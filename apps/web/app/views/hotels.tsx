@@ -6,11 +6,14 @@ import {
   prebookHotel,
   bookHotel,
   cityBelongsToCountry,
+  getHotelDetails,
   listCountries,
   searchHotels,
   type PlaceCountry,
+  type HotelContent,
   type HotelOffer,
   type HotelPrebookAttempt,
+  type HotelReview,
   type HotelSearchResponse,
   type ProviderActionResponse,
 } from "../../lib/api-liteapi";
@@ -31,6 +34,7 @@ import {
   nightsBetween,
 } from "./places-options";
 import { CityPicker } from "./city-picker";
+import { HotelFacts, PhotoSheet, RoomFacts } from "./hotel-facts";
 import { GuestStepper, SearchField } from "./search-fields";
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
@@ -158,6 +162,7 @@ export function HotelDetail({
   prebookedOfferId,
   onBack,
   onReserve,
+  loadDetails = getHotelDetails,
 }: {
   entry: HotelSearchResponse["hotels"][number];
   nights: number;
@@ -168,15 +173,59 @@ export function HotelDetail({
   prebookedOfferId: string | null;
   onBack: () => void;
   onReserve: (offer: HotelOffer) => void;
+  /** Previews replace the content call; production uses the API. */
+  loadDetails?: (
+    hotelId: string,
+  ) => Promise<{ hotel: HotelContent; reviews: HotelReview[] }>;
 }) {
   const { hotel, offers } = entry;
+  // The provider's content call is separate from the rate search: it holds the
+  // description, photos, facilities, house rules, nearby places and reviews.
+  const [content, setContent] = useState<HotelContent | null>(null);
+  const [reviews, setReviews] = useState<HotelReview[]>([]);
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [gallery, setGallery] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setContent(null);
+    setReviews([]);
+    setContentError(null);
+    loadDetails(hotel.hotel_id)
+      .then((result) => {
+        if (cancelled) return;
+        setContent(result.hotel);
+        setReviews(result.reviews);
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setContentError(
+          caught instanceof ApiClientError
+            ? caught.message
+            : "Hotel details are unavailable right now.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hotel.hotel_id, loadDetails]);
+
+  const roomContent = (roomName: string) =>
+    content?.rooms.find((room) => room.name === roomName) ?? null;
+
   return (
     <section className="detail-page">
       <button className="button ghost detail-back" onClick={onBack} type="button">
         ← Back to results
       </button>
       <div className="detail-hero">
-        <div className="detail-photo">
+        <button
+          className="detail-photo"
+          onClick={() => {
+            if (content) setGallery(true);
+          }}
+          type="button"
+        >
           {hotel.photo_url ? (
             <img alt={hotel.name} src={hotel.photo_url} />
           ) : (
@@ -184,7 +233,12 @@ export function HotelDetail({
               {hotel.name.slice(0, 1)}
             </span>
           )}
-        </div>
+          {content ? (
+            <span className="detail-photo-badge">
+              {content.images.length} photos
+            </span>
+          ) : null}
+        </button>
         <div className="detail-info">
           <div className="result-title">
             <h2>{hotel.name}</h2>
@@ -208,8 +262,29 @@ export function HotelDetail({
                 : ""}
             </p>
           ) : null}
+          {content?.checkin_from || content?.checkout_until ? (
+            <p className="event-meta">
+              <span>◷</span> Check-in {content?.checkin_from ?? "—"} · check-out{" "}
+              {content?.checkout_until ?? "—"}
+            </p>
+          ) : null}
+          {content?.policies.length ? (
+            <p className="event-meta">
+              <span>⚑</span> {content.policies.join(" · ")}
+            </p>
+          ) : null}
         </div>
       </div>
+      {contentError ? (
+        <p className="helper-text" role="status">
+          {contentError}
+        </p>
+      ) : null}
+      <HotelFacts
+        content={content}
+        openGallery={() => setGallery(true)}
+        reviews={reviews}
+      />
       <h3 className="detail-subhead">
         Choose a room ·{" "}
         {offers.length === 1 ? "1 rate" : `${offers.length} rates`} for these
@@ -227,6 +302,7 @@ export function HotelDetail({
                     <span className="tag indigo">{offer.board_name}</span>
                   ) : null}
                 </div>
+                <RoomFacts room={roomContent(offer.room_name)} />
                 <div className="result-tags">
                   <span>{refundLabel(offer)}</span>
                   {offer.taxes_included !== null ? (
@@ -258,6 +334,9 @@ export function HotelDetail({
           );
         })}
       </div>
+      {gallery && content ? (
+        <PhotoSheet content={content} onClose={() => setGallery(false)} />
+      ) : null}
     </section>
   );
 }

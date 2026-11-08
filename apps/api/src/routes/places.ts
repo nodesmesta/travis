@@ -21,6 +21,18 @@ interface CachedCountries {
 
 const countryCache: { current: CachedCountries | null } = { current: null };
 const cityCache = new Map<string, { at: number; cities: string[] }>();
+/**
+ * One hotel's description, facilities, photos, rooms and the latest guest
+ * reviews. Large and slow to fetch, so a hotel is cached after its first open.
+ */
+const hotelCache = new Map<
+  string,
+  {
+    at: number;
+    content: Awaited<ReturnType<LiteApiClient["getHotelContent"]>>;
+    reviews: Awaited<ReturnType<LiteApiClient["getHotelReviews"]>>;
+  }
+>();
 
 function makeClient(context: RequestContext): LiteApiClient {
   return new LiteApiClient({
@@ -128,11 +140,50 @@ function countryParam(context: RequestContext): string {
   return value;
 }
 
+async function hotel(context: RequestContext, hotelId: string) {
+  const cached = hotelCache.get(hotelId);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached;
+  const client = makeClient(context);
+  const [content, reviews] = await Promise.all([
+    client.getHotelContent(hotelId),
+    client.getHotelReviews(hotelId, 12),
+  ]);
+  const fresh = { at: Date.now(), content, reviews };
+  hotelCache.set(hotelId, fresh);
+  return fresh;
+}
+
+/** Provider ids are short alphanumeric tokens such as `lpff41b`. */
+function hotelIdParam(value: string | undefined): string {
+  const id = (value ?? "").trim();
+  const valid =
+    id.length >= 3 &&
+    id.length <= 40 &&
+    [...id].every(
+      (char) =>
+        (char >= "0" && char <= "9") ||
+        (char >= "a" && char <= "z") ||
+        (char >= "A" && char <= "Z") ||
+        char === "-" ||
+        char === "_",
+    );
+  if (!valid) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "hotel id is not valid.",
+    );
+  }
+  return id;
+}
+
 export const placeRoutes: RouteModule = async (context) => {
   const { method, url } = context;
   const countriesPath = matchPath(url.pathname, `${PLACES}/countries`);
   const citiesPath = matchPath(url.pathname, `${PLACES}/cities`);
-  if (!countriesPath && !citiesPath) return false;
+  const hotelPath = matchPath(url.pathname, `${PLACES}/hotels/:hotelId`);
+  if (!countriesPath && !citiesPath && !hotelPath) return false;
   if (method !== "GET") return false;
 
   const session = await context.authenticate();
@@ -142,6 +193,18 @@ export const placeRoutes: RouteModule = async (context) => {
     const cached = await countries(context);
     writeJson(context.response, 200, {
       countries: cached.countries,
+      request_id: context.requestId,
+    });
+    return true;
+  }
+
+  if (hotelPath) {
+    take(context, session.user.id, "hotel");
+    const id = hotelIdParam(hotelPath.hotelId);
+    const cached = await hotel(context, id);
+    writeJson(context.response, 200, {
+      hotel: cached.content,
+      reviews: cached.reviews,
       request_id: context.requestId,
     });
     return true;

@@ -14,6 +14,7 @@ import {
   getFlightBooking,
   prebookFlight,
   searchFlights,
+  type FlightBaggage,
   type FlightJourney,
   type FlightOffer,
   type FlightPrebookAttempt,
@@ -121,6 +122,17 @@ export function JourneyCard({
   );
 }
 
+function baggageText(bag: FlightBaggage | null): string | null {
+  if (!bag) return null;
+  const parts = [
+    bag.pieces !== null ? `${bag.pieces} ×` : null,
+    bag.weight_kg !== null ? `${bag.weight_kg} kg` : null,
+    bag.size,
+  ].filter((value): value is string => value !== null && value.length > 0);
+  if (parts.length === 0) return bag.description;
+  return `${bag.description ?? "Bag"}: ${parts.join(" ")}`;
+}
+
 function seatHint(offer: FlightOffer): string | null {
   if (offer.seats_remaining === null) return null;
   if (offer.seats_remaining <= 0) return "Sold out at this fare";
@@ -170,7 +182,14 @@ export function FlightDetail({
             <span>◷</span> {date} ·{" "}
             {Math.floor(journey.duration_minutes / 60)}h{" "}
             {journey.duration_minutes % 60}m total
+            {journey.overnight ? " · overnight" : ""}
           </p>
+          {first.operating_carrier_name &&
+          first.operating_carrier_name !== first.carrier_name ? (
+            <p className="event-meta">
+              <span>✈</span> Operated by {first.operating_carrier_name}
+            </p>
+          ) : null}
           <ol className="segment-timeline">
             {journey.segments.map((segment) => (
               <li key={`${segment.flight_number}-${segment.departs_local}`}>
@@ -185,6 +204,17 @@ export function FlightDetail({
                 <strong>
                   {segment.arrives_local} {segment.destination_code}
                 </strong>
+                <span className="segment-airport">
+                  {segment.origin_name ?? segment.origin_code} →{" "}
+                  {segment.destination_name ?? segment.destination_code}
+                  {segment.operating_carrier_name &&
+                  segment.operating_carrier_name !== segment.carrier_name
+                    ? ` · operated by ${segment.operating_carrier_name}`
+                    : ""}
+                  {segment.stops_within_segment
+                    ? ` · ${segment.stops_within_segment} technical stop(s)`
+                    : ""}
+                </span>
               </li>
             ))}
           </ol>
@@ -222,7 +252,29 @@ export function FlightDetail({
                       : "Checked bag extra"}
                   </span>
                   {seatHint(offer) ? <span>{seatHint(offer)}</span> : null}
+                  {offer.terms ? (
+                    <span>
+                      {offer.terms.refundable ? "Refundable" : "Non-refundable"}
+                    </span>
+                  ) : null}
+                  {offer.terms?.changeable ? <span>Changes allowed</span> : null}
                 </div>
+                <details className="fare-facts">
+                  <summary>Fare details</summary>
+                  <ul>
+                    {baggageText(offer.baggage.cabin) ? (
+                      <li>{baggageText(offer.baggage.cabin)}</li>
+                    ) : null}
+                    {baggageText(offer.baggage.checked) ? (
+                      <li>{baggageText(offer.baggage.checked)}</li>
+                    ) : (
+                      <li>No checked bag in this fare</li>
+                    )}
+                    {(offer.terms?.messages ?? []).map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                </details>
               </div>
               <div className="result-price">
                 <span className="result-price-label">Total fare</span>
