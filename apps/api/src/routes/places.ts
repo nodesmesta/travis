@@ -1,4 +1,9 @@
 import { LiteApiClient } from "@travelflow/integrations";
+import type {
+  HotelContent,
+  HotelOffer,
+  HotelRoomContent,
+} from "@travelflow/integrations";
 import { AppError } from "../errors.js";
 import { writeJson } from "../http.js";
 import { FixedWindowLimiter } from "../rate-limit.js";
@@ -153,6 +158,226 @@ async function hotel(context: RequestContext, hotelId: string) {
   return fresh;
 }
 
+/**
+ * One entry per hotel and night range: the rooms the provider actually sells for
+ * those dates, joined to the hotel content so each room can show its own photos.
+ * Rates move, so this cache is much shorter than the content cache.
+ */
+const rateCache = new Map<
+  string,
+  { at: number; value: Awaited<ReturnType<typeof loadRateGroups>> }
+>();
+const RATE_TTL_MS = 10 * 60 * 1000;
+
+function roomWords(value: string): string[] {
+  const words: string[] = [];
+  let current = "";
+  for (const char of value.toLowerCase()) {
+    const isLetter = char >= "a" && char <= "z";
+    const isDigit = char >= "0" && char <= "9";
+    if (isLetter || isDigit) {
+      current += char;
+      continue;
+    }
+    if (current.length > 0) words.push(current);
+    current = "";
+  }
+  if (current.length > 0) words.push(current);
+  // "room" and single letters ("a") say nothing about which room it is.
+  return words.filter((word) => word.length > 1 && word !== "room");
+}
+
+/** How much of the shorter name the two share: 1 means one name sits inside the other. */
+function roomAffinity(offerName: string, contentName: string): number {
+  const left = new Set(roomWords(offerName));
+  const right = new Set(roomWords(contentName));
+  if (left.size === 0 || right.size === 0) return 0;
+  let shared = 0;
+  for (const word of left) if (right.has(word)) shared += 1;
+  return shared / Math.min(left.size, right.size);
+}
+
+function contentRoomFor(
+  offerName: string,
+  rooms: HotelRoomContent[],
+): HotelRoomContent | null {
+  let best: HotelRoomContent | null = null;
+  let bestScore = 0;
+  for (const room of rooms) {
+    const score = roomAffinity(offerName, room.name);
+    if (score > bestScore) {
+      best = room;
+      bestScore = score;
+    }
+  }
+  // Below half the words in common the "match" would be a different room.
+  return bestScore >= 0.5 ? best : null;
+}
+
+function rateGroups(offers: HotelOffer[], rooms: HotelRoomContent[]) {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      name: string;
+      room: HotelRoomContent | null;
+      offers: HotelOffer[];
+      seen: Set<string>;
+    }
+  >();
+  for (const offer of offers) {
+    const room = contentRoomFor(offer.room_name, rooms);
+    const key = room?.room_id ?? `rate:${offer.room_name.toLowerCase()}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        name: room?.name ?? offer.room_name,
+        room,
+        offers: [],
+        seen: new Set<string>(),
+      };
+      groups.set(key, group);
+    }
+    // The same room and board at the same price is one choice, however many
+    // suppliers resell it.
+    const signature = `${offer.board_name ?? ""}|${offer.total.amount}|${offer.refundable}`;
+    if (group.seen.has(signature)) continue;
+    group.seen.add(signature);
+    group.offers.push(offer);
+  }
+  return [...groups.values()]
+    .map(({ seen: _seen, ...rest }) => rest)
+    .sort(
+      (a, b) =>
+        (a.offers[0]?.total.amount ?? 0) - (b.offers[0]?.total.amount ?? 0),
+    );
+}
+
+function nightsBetween(checkin: string, checkout: string): number {
+  return Math.max(
+    1,
+    Math.round(
+      (Date.parse(`${checkout}T00:00:00Z`) - Date.parse(`${checkin}T00:00:00Z`)) /
+        86_400_000,
+    ),
+  );
+}
+
+function dateParam(context: RequestContext, name: string): string {
+  const value = (context.url.searchParams.get(name) ?? "").trim();
+  const parts = value.split("-");
+  const shaped =
+    parts.length === 3 &&
+    parts[0]?.length === 4 &&
+    parts[1]?.length === 2 &&
+    parts[2]?.length === 2 &&
+    [...value].every(
+      (char, index) =>
+        index === 4 || index === 7 ||
+        (char >= "0" && char <= "9"),
+    );
+  if (!shaped || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      `${name} must be a date (YYYY-MM-DD).`,
+    );
+  }
+  return value;
+}
+
+async function loadRateGroups(
+  context: RequestContext,
+  input: {
+    hotelId: string;
+    city: string;
+    country: string;
+    checkin: string;
+    checkout: string;
+    adults: number;
+    currency: string;
+  },
+) {
+  const client = makeClient(context);
+  const [rates, content] = await Promise.all([
+    client.getHotelRates({
+      hotel_id: input.hotelId,
+      city: input.city,
+      country_code: input.country,
+      checkin: input.checkin,
+      checkout: input.checkout,
+      adults: input.adults,
+      currency: input.currency,
+      guest_nationality: input.country,
+    }),
+    hotel(context, input.hotelId).then((cached) => cached.content as HotelContent),
+  ]);
+  return {
+    nights: nightsBetween(input.checkin, input.checkout),
+    hotel_name: rates.hotel?.name ?? content.name,
+    offer_count: rates.offers.length,
+    groups: rateGroups(rates.offers, content.rooms),
+    retrieved_at: rates.retrieved_at,
+  };
+}
+
+async function rates(
+  context: RequestContext,
+  hotelId: string,
+): Promise<Awaited<ReturnType<typeof loadRateGroups>>> {
+  const city = (context.url.searchParams.get("city") ?? "").trim();
+  if (city.length === 0 || city.length > 120) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "city is required.",
+    );
+  }
+  const country = countryParam(context);
+  const checkin = dateParam(context, "checkin");
+  const checkout = dateParam(context, "checkout");
+  if (Date.parse(checkout) <= Date.parse(checkin)) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "checkout must be after checkin.",
+    );
+  }
+  const rawAdults = Number(context.url.searchParams.get("adults") ?? "1");
+  const adults = Number.isInteger(rawAdults)
+    ? Math.min(Math.max(rawAdults, 1), 9)
+    : 1;
+  const currency = (context.url.searchParams.get("currency") ?? "USD")
+    .trim()
+    .toUpperCase();
+  const key = [
+    hotelId,
+    checkin,
+    checkout,
+    adults,
+    currency,
+    city.toLowerCase(),
+    country,
+  ].join("|");
+  const cached = rateCache.get(key);
+  if (cached && Date.now() - cached.at < RATE_TTL_MS) return cached.value;
+  const value = await loadRateGroups(context, {
+    hotelId,
+    city,
+    country,
+    checkin,
+    checkout,
+    adults,
+    currency,
+  });
+  rateCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 /** Provider ids are short alphanumeric tokens such as `lpff41b`. */
 function hotelIdParam(value: string | undefined): string {
   const id = (value ?? "").trim();
@@ -182,8 +407,13 @@ export const placeRoutes: RouteModule = async (context) => {
   const { method, url } = context;
   const countriesPath = matchPath(url.pathname, `${PLACES}/countries`);
   const citiesPath = matchPath(url.pathname, `${PLACES}/cities`);
+  const hotelRatesPath = matchPath(
+    url.pathname,
+    `${PLACES}/hotels/:hotelId/rates`,
+  );
   const hotelPath = matchPath(url.pathname, `${PLACES}/hotels/:hotelId`);
-  if (!countriesPath && !citiesPath && !hotelPath) return false;
+  if (!countriesPath && !citiesPath && !hotelPath && !hotelRatesPath)
+    return false;
   if (method !== "GET") return false;
 
   const session = await context.authenticate();
@@ -193,6 +423,18 @@ export const placeRoutes: RouteModule = async (context) => {
     const cached = await countries(context);
     writeJson(context.response, 200, {
       countries: cached.countries,
+      request_id: context.requestId,
+    });
+    return true;
+  }
+
+  if (hotelRatesPath) {
+    take(context, session.user.id, "hotel-rates");
+    const id = hotelIdParam(hotelRatesPath.hotelId);
+    const value = await rates(context, id);
+    writeJson(context.response, 200, {
+      hotel_id: id,
+      ...value,
       request_id: context.requestId,
     });
     return true;

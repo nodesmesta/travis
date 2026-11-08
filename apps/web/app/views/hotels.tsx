@@ -7,12 +7,14 @@ import {
   bookHotel,
   cityBelongsToCountry,
   getHotelDetails,
+  getHotelRoomOptions,
   listCountries,
   searchHotels,
   type PlaceCountry,
   type HotelContent,
   type HotelOffer,
   type HotelPrebookAttempt,
+  type HotelRateGroup,
   type HotelReview,
   type HotelSearchResponse,
   type ProviderActionResponse,
@@ -35,8 +37,18 @@ import {
 } from "./places-options";
 import { CityPicker } from "./city-picker";
 import { DateRangePopover } from "./date-popover";
-import { HotelFacts, PhotoSheet, RoomFacts } from "./hotel-facts";
+import {
+  HotelFacts,
+  PhotoSheet,
+  RoomFactsInline,
+  RoomPhotos,
+} from "./hotel-facts";
 import { GuestStepper, SearchField } from "./search-fields";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
 
@@ -139,6 +151,28 @@ export function HotelRow({
   );
 }
 
+/** The provider's deadline string (`2026-11-29 10:00:00`) in readable form. */
+function policyDate(value: string): string {
+  const [date, time] = value.split(" ");
+  if (!date) return value;
+  const [year, month, day] = date.split("-");
+  const label = `${Number(day)} ${MONTH_NAMES[Number(month) - 1] ?? month}`;
+  return time ? `${label} ${year}, ${time.slice(0, 5)}` : `${label} ${year}`;
+}
+
+function cancellationLine(offer: HotelOffer): string {
+  if (offer.refundable === "non_refundable") return "Non-refundable";
+  if (offer.free_cancellation_until)
+    return `Free cancellation until ${policyDate(offer.free_cancellation_until)}`;
+  const steps = offer.cancellation.steps ?? [];
+  const first = steps[0];
+  if (first?.before)
+    return `Cancel before ${policyDate(first.before)}${
+      first.fee ? ` or pay ${money(first.fee)}` : ""
+    }`;
+  return offer.refundable === "refundable" ? "Refundable" : "See policy";
+}
+
 function refundLabel(offer: HotelOffer): string {
   if (offer.refundable === "refundable") {
     return offer.free_cancellation_until
@@ -159,17 +193,22 @@ export function HotelDetail({
   checkin,
   checkout,
   adults,
+  countryCode,
+  currency,
   busy,
   prebookedOfferId,
   onBack,
   onReserve,
   loadDetails = getHotelDetails,
+  loadRates = getHotelRoomOptions,
 }: {
   entry: HotelSearchResponse["hotels"][number];
   nights: number;
   checkin: string;
   checkout: string;
   adults: number;
+  countryCode: string;
+  currency: string;
   busy: boolean;
   prebookedOfferId: string | null;
   onBack: () => void;
@@ -178,6 +217,8 @@ export function HotelDetail({
   loadDetails?: (
     hotelId: string,
   ) => Promise<{ hotel: HotelContent; reviews: HotelReview[] }>;
+  /** Previews replace the rate call; production uses the API. */
+  loadRates?: typeof getHotelRoomOptions;
 }) {
   const { hotel, offers } = entry;
   // The provider's content call is separate from the rate search: it holds the
@@ -186,6 +227,11 @@ export function HotelDetail({
   const [reviews, setReviews] = useState<HotelReview[]>([]);
   const [contentError, setContentError] = useState<string | null>(null);
   const [gallery, setGallery] = useState(false);
+  // The search asks for a handful of rates per hotel; every room the provider
+  // sells for these nights is fetched here, grouped by the room it belongs to.
+  const [groups, setGroups] = useState<HotelRateGroup[] | null>(null);
+  const [rateCount, setRateCount] = useState(0);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,8 +257,36 @@ export function HotelDetail({
     };
   }, [hotel.hotel_id, loadDetails]);
 
-  const roomContent = (roomName: string) =>
-    content?.rooms.find((room) => room.name === roomName) ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    setGroups(null);
+    setRateCount(0);
+    setRateError(null);
+    loadRates(hotel.hotel_id, {
+      city: hotel.city ?? "",
+      country: countryCode,
+      checkin,
+      checkout,
+      adults,
+      currency,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setGroups(result.groups);
+        setRateCount(result.offer_count);
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setRateError(
+          caught instanceof ApiClientError
+            ? caught.message
+            : "The rooms for these nights could not be loaded.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hotel.hotel_id, hotel.city, countryCode, checkin, checkout, adults, currency, loadRates]);
 
   return (
     <section className="detail-page">
@@ -287,54 +361,153 @@ export function HotelDetail({
         reviews={reviews}
       />
       <h3 className="detail-subhead">
-        Choose a room ·{" "}
-        {offers.length === 1 ? "1 rate" : `${offers.length} rates`} for these
-        nights
+        {groups === null
+          ? "Loading every room the provider sells…"
+          : `Choose a room · ${rateCount} ${
+              rateCount === 1 ? "rate" : "rates"
+            } in ${groups.length} ${groups.length === 1 ? "room" : "rooms"} for these nights`}
       </h3>
-      <div className="room-list">
-        {offers.map((offer) => {
-          const reserved = prebookedOfferId === offer.offer_id;
-          return (
-            <article className="result-row room" key={offer.offer_id}>
-              <div className="result-body">
+      {rateError ? (
+        <p className="helper-text" role="status">
+          {rateError}
+        </p>
+      ) : null}
+      {groups ? (
+        <div className="room-list">
+          {groups.map((group) => (
+            <article className="room-card" key={group.key}>
+              <RoomPhotos
+                name={group.name}
+                photos={group.room?.photos ?? []}
+              />
+              <div className="room-body">
                 <div className="result-title">
-                  <h3>{offer.room_name}</h3>
-                  {offer.board_name ? (
-                    <span className="tag indigo">{offer.board_name}</span>
-                  ) : null}
-                </div>
-                <RoomFacts room={roomContent(offer.room_name)} />
-                <div className="result-tags">
-                  <span>{refundLabel(offer)}</span>
-                  {offer.taxes_included !== null ? (
-                    <span>
-                      Taxes included{" "}
-                      {money({
-                        amount: offer.taxes_included,
-                        currency: offer.total.currency,
-                      })}
+                  <h3>{group.name}</h3>
+                  {group.offers[0]?.board_name ? (
+                    <span className="tag indigo">
+                      {group.offers[0].board_name}
                     </span>
                   ) : null}
                 </div>
-              </div>
-              <div className="result-price">
-                <span className="result-price-label">
-                  {nights > 1 ? `Total · ${nights} nights` : "Total"}
-                </span>
-                <strong>{money(offer.total)}</strong>
-                <button
-                  className={`button ${reserved ? "secondary" : "accent"} wide`}
-                  disabled={busy || reserved}
-                  onClick={() => onReserve(offer)}
-                  type="button"
-                >
-                  {reserved ? "Rate reserved" : busy ? "Reserving…" : "Reserve"}
-                </button>
+                <RoomFactsInline room={group.room} />
+                <div className="room-offers">
+                  {group.offers.map((offer) => {
+                    const reserved = prebookedOfferId === offer.offer_id;
+                    return (
+                      <div className="room-offer" key={offer.offer_id}>
+                        <div className="offer-terms">
+                          <strong>{offer.board_name ?? "Room only"}</strong>
+                          <span
+                            className={`offer-cancel ${
+                              offer.refundable === "non_refundable" ? "strict" : ""
+                            }`}
+                          >
+                            {cancellationLine(offer)}
+                          </span>
+                          <span className="offer-meta">
+                            {offer.max_occupancy !== null
+                              ? `Sleeps ${offer.max_occupancy}`
+                              : null}
+                            {offer.children !== null && offer.children > 0
+                              ? ` · ${offer.children} child`
+                              : null}
+                            {offer.supplier ? ` · via ${offer.supplier}` : ""}
+                          </span>
+                          {offer.perks.length > 0 ? (
+                            <span className="chip-row">
+                              {offer.perks.map((perk) => (
+                                <span className="chip sage" key={perk}>
+                                  {perk}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="offer-buy">
+                          <span className="result-price-label">
+                            {nights > 1 ? `Total · ${nights} nights` : "Total"}
+                          </span>
+                          <strong>{money(offer.total)}</strong>
+                          {offer.taxes_included !== null ? (
+                            <span className="offer-meta">
+                              incl. {money({
+                                amount: offer.taxes_included,
+                                currency: offer.total.currency,
+                              })} taxes
+                            </span>
+                          ) : null}
+                          <button
+                            className={`button ${
+                              reserved ? "secondary" : "accent"
+                            } wide`}
+                            disabled={busy || reserved}
+                            onClick={() => onReserve(offer)}
+                            type="button"
+                          >
+                            {reserved
+                              ? "Rate reserved"
+                              : busy
+                                ? "Reserving…"
+                                : "Reserve"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </article>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : null}
+      {!groups && !rateError ? (
+        // Until the full list arrives, the rates from the search are still bookable.
+        <div className="room-list">
+          {offers.map((offer) => {
+            const reserved = prebookedOfferId === offer.offer_id;
+            return (
+              <article className="result-row room" key={offer.offer_id}>
+                <div className="result-body">
+                  <div className="result-title">
+                    <h3>{offer.room_name}</h3>
+                    {offer.board_name ? (
+                      <span className="tag indigo">{offer.board_name}</span>
+                    ) : null}
+                  </div>
+                  <RoomFactsInline
+                    room={
+                      content?.rooms.find(
+                        (room) => room.name === offer.room_name,
+                      ) ?? null
+                    }
+                  />
+                  <div className="result-tags">
+                    <span>{refundLabel(offer)}</span>
+                  </div>
+                </div>
+                <div className="result-price">
+                  <span className="result-price-label">
+                    {nights > 1 ? `Total · ${nights} nights` : "Total"}
+                  </span>
+                  <strong>{money(offer.total)}</strong>
+                  <button
+                    className={`button ${reserved ? "secondary" : "accent"} wide`}
+                    disabled={busy || reserved}
+                    onClick={() => onReserve(offer)}
+                    type="button"
+                  >
+                    {reserved
+                      ? "Rate reserved"
+                      : busy
+                        ? "Reserving…"
+                        : "Reserve"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
       {gallery && content ? (
         <PhotoSheet content={content} onClose={() => setGallery(false)} />
       ) : null}
@@ -859,6 +1032,8 @@ export default function HotelsView({
               busy={prebookingOffer !== null}
               checkin={checkin}
               checkout={checkout}
+              countryCode={countryCode}
+              currency={currency}
               entry={detail}
               nights={nights}
               onBack={() => setDetail(null)}

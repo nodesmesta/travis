@@ -199,6 +199,14 @@ export interface HotelContent {
   rooms: HotelRoomContent[];
 }
 
+/** One step of the provider's cancellation ladder. */
+export interface HotelCancellationStep {
+  /** The deadline, as the provider states it (`2026-11-29 10:00:00`, GMT). */
+  before: string | null;
+  /** What cancelling after that deadline costs. */
+  fee: Money | null;
+}
+
 export interface HotelOffer {
   offer_id: string;
   room_name: string;
@@ -208,6 +216,36 @@ export interface HotelOffer {
   /** RFN refundable, NRFN non-refundable, as the provider reports it. */
   refundable: "refundable" | "non_refundable" | "unknown";
   free_cancellation_until: string | null;
+  /** What the rate allows: people, extras, who sells it, how it is paid. */
+  max_occupancy: number | null;
+  adults: number | null;
+  children: number | null;
+  perks: string[];
+  supplier: string | null;
+  payment_types: string[];
+  cancellation: {
+    tag: string | null;
+    steps: HotelCancellationStep[];
+  };
+}
+
+export interface HotelRatesRequest {
+  hotel_id: string;
+  city: string;
+  country_code: string;
+  checkin: string;
+  checkout: string;
+  adults: number;
+  currency: string;
+  guest_nationality: string;
+}
+
+export interface HotelRatesResult {
+  hotel: HotelStay | null;
+  /** Every room the provider sells for these nights, cheapest first. */
+  offers: HotelOffer[];
+  retrieved_at: string;
+  provider_request_id: string | null;
 }
 
 export interface HotelSearchResult {
@@ -796,6 +834,66 @@ export class LiteApiClient {
     return normalizeHotelSearch(result, limit);
   }
 
+  /**
+   * `POST /hotels/rates` for one hotel with every rate it sells: the search only
+   * asks for a handful per hotel, but the detail page has to show them all.
+   */
+  public async getHotelRates(
+    request: HotelRatesRequest,
+  ): Promise<HotelRatesResult> {
+    if (request.hotel_id.trim().length === 0) {
+      throw queryInvalid("hotel_id is required.");
+    }
+    if (request.city.trim().length === 0) {
+      throw queryInvalid("city is required.");
+    }
+    if (!isUpperCode(request.country_code, 2)) {
+      throw queryInvalid("country_code must be a 2-letter code.");
+    }
+    assertDate(request.checkin, "checkin");
+    assertDate(request.checkout, "checkout");
+    if (Date.parse(request.checkout) <= Date.parse(request.checkin)) {
+      throw queryInvalid("checkout must be after checkin.");
+    }
+    if (!Number.isInteger(request.adults) || request.adults < 1) {
+      throw queryInvalid("adults must be at least 1.");
+    }
+    if (!isUpperCode(request.currency, 3)) {
+      throw queryInvalid("currency must be a 3-letter code.");
+    }
+    if (!isUpperCode(request.guest_nationality, 2)) {
+      throw queryInvalid("guest_nationality must be a 2-letter code.");
+    }
+    const result = await this.request(
+      "POST",
+      "/hotels/rates",
+      "LiteAPI hotel rates",
+      {
+        cityName: request.city,
+        countryCode: request.country_code,
+        checkin: request.checkin,
+        checkout: request.checkout,
+        occupancies: [{ adults: request.adults }],
+        currency: request.currency,
+        guestNationality: request.guest_nationality,
+        // The provider caps per-hotel rates; 50 is its practical ceiling.
+        maxRatesPerHotel: 50,
+        limit: 50,
+        timeout: 15,
+      },
+    );
+    const normalized = normalizeHotelSearch(result);
+    const match = normalized.hotels.find(
+      (entry) => entry.hotel.hotel_id === request.hotel_id,
+    );
+    return {
+      hotel: match?.hotel ?? null,
+      offers: match?.offers ?? [],
+      retrieved_at: normalized.retrieved_at,
+      provider_request_id: normalized.provider_request_id,
+    };
+  }
+
   /** `GET /data/hotel`: everything the provider holds about one hotel. */
   public async getHotelContent(hotelId: string): Promise<HotelContent> {
     assertProviderId(hotelId, "hotel id");
@@ -1320,6 +1418,38 @@ function cancellationUntil(
  * Every room and rate sold for the stay, cheapest first. Each room type carries
  * the offer id the prebook step needs, so two rooms are two bookable options.
  */
+/** Strings from a provider list, ignoring blank or non-string entries. */
+function providerStrings(value: unknown): string[] {
+  const out: string[] = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    if (typeof entry === "string" && entry.trim().length > 0) out.push(entry);
+  }
+  return out;
+}
+
+/** `cancellationPolicies.cancelPolicyInfos[]`, in the order sold. */
+function cancellationSteps(
+  policy: Record<string, unknown> | null,
+): HotelCancellationStep[] {
+  const steps: HotelCancellationStep[] = [];
+  for (const entry of Array.isArray(policy?.cancelPolicyInfos)
+    ? policy.cancelPolicyInfos
+    : []) {
+    const step = asRecord(entry);
+    const before = nonBlankString(step?.cancelTime);
+    const amount = finiteNumber(step?.amount);
+    const currency = nonBlankString(step?.currency);
+    steps.push({
+      before,
+      fee:
+        amount !== null && currency
+          ? { amount, currency }
+          : null,
+    });
+  }
+  return steps;
+}
+
 function hotelOffers(row: Record<string, unknown> | null): HotelOffer[] {
   const offers: HotelOffer[] = [];
   const seen = new Set<string>();
@@ -1360,6 +1490,16 @@ function hotelOffers(row: Record<string, unknown> | null): HotelOffer[] {
               ? "non_refundable"
               : "unknown",
         free_cancellation_until: cancellationUntil(policy),
+        max_occupancy: finiteNumber(rate?.maxOccupancy),
+        adults: finiteNumber(rate?.adultCount),
+        children: finiteNumber(rate?.childCount),
+        perks: providerStrings(rate?.perks),
+        supplier: nonBlankString(roomType?.supplier),
+        payment_types: providerStrings(roomType?.paymentTypes),
+        cancellation: {
+          tag,
+          steps: cancellationSteps(policy),
+        },
       });
     }
   }
