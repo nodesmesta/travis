@@ -834,6 +834,23 @@ export class LiteApiClient {
     return normalizeHotelSearch(result, limit);
   }
 
+  /** The requested hotel out of a rate search, with the provider's own counts. */
+  private hotelRatesFrom(
+    result: ProviderJson,
+    hotelId: string,
+  ): HotelRatesResult {
+    const normalized = normalizeHotelSearch(result);
+    const match = normalized.hotels.find(
+      (entry) => entry.hotel.hotel_id === hotelId,
+    );
+    return {
+      hotel: match?.hotel ?? null,
+      offers: match?.offers ?? [],
+      retrieved_at: normalized.retrieved_at,
+      provider_request_id: normalized.provider_request_id,
+    };
+  }
+
   /**
    * `POST /hotels/rates` for one hotel with every rate it sells: the search only
    * asks for a handful per hotel, but the detail page has to show them all.
@@ -876,22 +893,37 @@ export class LiteApiClient {
         occupancies: [{ adults: request.adults }],
         currency: request.currency,
         guestNationality: request.guest_nationality,
-        // The provider caps per-hotel rates; 50 is its practical ceiling.
+        // The provider caps rates per hotel; 50 is its practical ceiling.
+        maxRatesPerHotel: 50,
+        // Its response is capped in total, so asking for 50 hotels quietly drops
+        // every hotel to 5 rates. At 20 hotels the full 50 rates survive, and the
+        // hotel list the app shows is 20 entries, so the hotel is in there.
+        limit: 20,
+        timeout: 15,
+      },
+    );
+    const found = this.hotelRatesFrom(result, request.hotel_id);
+    if (found.hotel) return found;
+    // Outside the first 20 the provider returns fewer rates per hotel, but a short
+    // list still beats telling the traveller the room list is empty.
+    const fallback = await this.request(
+      "POST",
+      "/hotels/rates",
+      "LiteAPI hotel rates",
+      {
+        cityName: request.city,
+        countryCode: request.country_code,
+        checkin: request.checkin,
+        checkout: request.checkout,
+        occupancies: [{ adults: request.adults }],
+        currency: request.currency,
+        guestNationality: request.guest_nationality,
         maxRatesPerHotel: 50,
         limit: 50,
         timeout: 15,
       },
     );
-    const normalized = normalizeHotelSearch(result);
-    const match = normalized.hotels.find(
-      (entry) => entry.hotel.hotel_id === request.hotel_id,
-    );
-    return {
-      hotel: match?.hotel ?? null,
-      offers: match?.offers ?? [],
-      retrieved_at: normalized.retrieved_at,
-      provider_request_id: normalized.provider_request_id,
-    };
+    return this.hotelRatesFrom(fallback, request.hotel_id);
   }
 
   /** `GET /data/hotel`: everything the provider holds about one hotel. */
