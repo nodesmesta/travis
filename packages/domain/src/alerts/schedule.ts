@@ -89,7 +89,9 @@ export function planSchedule(input: ScheduleInput): SchedulePlan {
   const weatherPoints = new Set<string>();
   for (const item of input.agenda) {
     if (item.status !== "planned" && item.status !== "confirmed") continue;
-    if (item.exposure !== "outdoor" && item.exposure !== "both") continue;
+    // Weather is a property of the place, not of how exposed the item is: the trip
+    // needs the forecast wherever it goes. The alert rules still decide risk from
+    // the item's exposure, so an indoor stay is not turned into a weather warning.
     const startMs = Date.parse(item.start_at);
     const endMs = Date.parse(item.end_at);
     if (endMs <= nowMs) continue;

@@ -164,7 +164,7 @@ test("departure reminder is created from the journey leg alone, without a provid
   assert.equal(alert.alert_type, "departure_reminder");
   assert.equal(alert.severity, "info");
   assert.deepEqual(alert.source_ids, []);
-  assert.equal(alert.internal_source.provider, "travelflow_journey_leg");
+  assert.equal(alert.internal_source.provider, "travis_journey_leg");
   assert.equal(alert.retrieved_at, NOW.toISOString());
   assert.equal(alert.expires_at, at(60));
   assert.ok(alert.factual_summary.includes("07:00"), alert.factual_summary);
@@ -556,15 +556,36 @@ test("traffic refresh opens one slot per interval, only inside the live horizon 
   ]);
 });
 
-test("weather refresh is planned once per context point for outdoor agenda items inside the horizon", () => {
+test("weather refresh is planned once per place for any agenda item inside the horizon", () => {
   const second = { ...agenda(), id: "00000000-0000-0000-0000-0000000000c2" };
   const plan = schedule({
     legs: [],
     agenda: [agenda(), second, agenda({ id: "x", exposure: "indoor" })],
   });
   const refreshes = plan.jobs.filter((j) => j.job_type === "refresh_weather");
+  assert.equal(refreshes.length, 1, "one read per place, however many items use it");
+  assert.deepEqual(refreshes[0].payload, { context_point_id: POINT });
+});
+
+test("an indoor stay still gets the forecast for its place", () => {
+  const plan = schedule({
+    legs: [],
+    agenda: [agenda({ exposure: "indoor" })],
+  });
+  const refreshes = plan.jobs.filter((j) => j.job_type === "refresh_weather");
   assert.equal(refreshes.length, 1);
   assert.deepEqual(refreshes[0].payload, { context_point_id: POINT });
+});
+
+test("an agenda item without a resolved place plans no weather and says why", () => {
+  const plan = schedule({
+    legs: [],
+    agenda: [agenda({ context_resolved: false })],
+  });
+  assert.equal(plan.jobs.some((j) => j.job_type === "refresh_weather"), false);
+  assert.deepEqual(plan.skipped, [
+    { entity: "agenda_item", id: AGENDA, reason: "CONTEXT_UNRESOLVED" },
+  ]);
 });
 
 test("draft and completed trips, cancelled legs, and past departures get no jobs", () => {

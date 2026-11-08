@@ -173,6 +173,9 @@ export interface HotelContent {
   address: string | null;
   city: string | null;
   country_code: string | null;
+  /** Where the hotel actually is, used when the trip records its location. */
+  latitude: number | null;
+  longitude: number | null;
   zip: string | null;
   stars: number | null;
   rating: number | null;
@@ -1931,6 +1934,8 @@ export function normalizeHotelContent(result: ProviderJson): HotelContent {
     address: nonBlankString(data.address),
     city: nonBlankString(data.city),
     country_code: nonBlankString(data.country),
+    latitude: finiteNumber(location?.latitude),
+    longitude: finiteNumber(location?.longitude),
     zip: nonBlankString(data.zip),
     stars,
     rating,

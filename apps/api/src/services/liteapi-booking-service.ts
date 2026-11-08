@@ -16,6 +16,7 @@ import {
 import type { Booking, ProviderBooking } from "../supabase/database.types.js";
 import {
   TripBookingLinkService,
+  type BookingPlaceResolver,
   type FlightSchedule,
 } from "./trip-booking-link-service.js";
 
@@ -57,14 +58,29 @@ export interface FlightPrebookResult extends ProviderAttemptResult {
   verification: Awaited<ReturnType<LiteApiClient["verifyFlight"]>>;
 }
 
+/**
+ * What the trip needs once a ticket exists. The weather at the booked place is read
+ * straight away, so the trip is not blind until the scheduler's horizon begins.
+ */
+export interface BookingFollowUp {
+  weatherAt(input: {
+    tripId: string;
+    userId: string;
+    bookingId: string;
+    contextPointId: string;
+  }): Promise<void>;
+}
+
 export class LiteApiBookingService {
   private readonly linker: TripBookingLinkService;
 
   public constructor(
     private readonly repository: LiteApiBookingRepository,
     private readonly client: LiteApiClient,
+    places: BookingPlaceResolver | null = null,
+    private readonly followUps: BookingFollowUp | null = null,
   ) {
-    this.linker = new TripBookingLinkService(repository);
+    this.linker = new TripBookingLinkService(repository, places);
   }
 
   public async prebookHotel(input: {
@@ -258,6 +274,15 @@ export class LiteApiBookingService {
           total: provider.total.amount,
         },
       );
+      // The ticket is real from here on, so the trip must learn about it: the stay
+      // becomes an agenda item and the hotel becomes the trip's location.
+      const linked = await this.linker.linkHotel({
+        tripId: input.tripId,
+        booking,
+        providerBooking,
+        hotelName: provider.hotel_name ?? hotelNameOf(providerBooking),
+      });
+      await this.afterBooking(input, booking.id, linked.contextPointId);
       return { booking, provider_booking: providerBooking, provider };
     } catch (error) {
       await this.repository.updateProviderBooking(attempt.id, input.tripId, {
@@ -335,12 +360,13 @@ export class LiteApiBookingService {
           total: provider.total.amount,
         },
       );
-      await this.linker.linkFlight({
+      const linked = await this.linker.linkFlight({
         tripId: input.tripId,
         booking,
         providerBooking,
         schedule: scheduleFromMetadata(providerBooking.metadata),
       });
+      await this.afterBooking(input, booking.id, linked.contextPointId);
       return { booking, provider_booking: providerBooking, provider };
     } catch (error) {
       await this.repository.updateProviderBooking(attempt.id, input.tripId, {
@@ -348,6 +374,29 @@ export class LiteApiBookingService {
         provider_status: providerFailure(error) ? "UNKNOWN" : "FAILED",
       });
       throw error;
+    }
+  }
+
+  /**
+   * Reads the weather at the place the ticket created, so the trip is useful the
+   * moment it exists. The ticket is already issued, so a follow-up that fails is
+   * reported by the follow-up itself and never unmakes the booking.
+   */
+  private async afterBooking(
+    input: { tripId: string; userId: string },
+    bookingId: string,
+    contextPointId: string | null,
+  ): Promise<void> {
+    if (!this.followUps || !contextPointId) return;
+    try {
+      await this.followUps.weatherAt({
+        tripId: input.tripId,
+        userId: input.userId,
+        bookingId,
+        contextPointId,
+      });
+    } catch {
+      // The follow-up logs its own failure; the booking stands regardless.
     }
   }
 
@@ -606,6 +655,13 @@ export class LiteApiBookingService {
       );
     }
   }
+}
+
+/** The hotel name kept on the attempt, for the itinerary title. */
+function hotelNameOf(providerBooking: ProviderBooking): string | null {
+  const metadata = providerBooking.metadata as { hotel_name?: unknown } | null;
+  const name = metadata?.hotel_name;
+  return typeof name === "string" && name.length > 0 ? name : null;
 }
 
 /** The schedule snapshot taken at prebook, if the traveller's search had one. */
