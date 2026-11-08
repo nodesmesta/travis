@@ -48,6 +48,7 @@ const snapshot = {
     point("m2", "Kuningan Client Office", "meeting"),
   ],
   agenda: [],
+  bookings: [],
   journeyLegs: [
     {
       id: "leg-1",
@@ -419,6 +420,7 @@ function build({ plan, synth }) {
 }
 
 function input(message, services, overrides = {}) {
+  const tripSnapshot = overrides.snapshot ?? snapshot;
   return {
     requestId: "req-1",
     executionId: "exec-1",
@@ -429,13 +431,13 @@ function input(message, services, overrides = {}) {
     history: [],
     previousEventResults: [],
     actionableEntities: { event_discovery_result: [], recommendation: [] },
-    snapshot,
+    snapshot: tripSnapshot,
     toolRuntime: {
       requestId: "req-1",
       executionId: "exec-1",
       userId: "user-1",
       tripId: TRIP_ID,
-      snapshot,
+      snapshot: tripSnapshot,
       services,
       maxItems: 8,
     },
@@ -462,6 +464,7 @@ function synthesis(message, overrides = {}) {
   return {
     message,
     recommendations: [],
+    travel_tips: [],
     limitations: [],
     follow_up_actions: [],
     recommended_option_id: null,
@@ -495,7 +498,7 @@ const ROUTE_ANSWER = synthesis(
 
 // --- registry ------------------------------------------------------------------
 
-test("the registry allowlists exactly the eight tools, all read-only with correct provider counts", () => {
+test("the registry allowlists exactly the nine tools, all read-only with correct provider counts", () => {
   const registry = createAssistantToolRegistry({
     aiToolTimeoutMs: 1,
     aiEventToolTimeoutMs: 2,
@@ -508,6 +511,7 @@ test("the registry allowlists exactly the eight tools, all read-only with correc
     "find_nearby_restaurants",
     "get_recommendations",
     "get_traffic",
+    "get_trip_advice",
     "get_trip_summary",
     "get_weather",
   ]);
@@ -523,6 +527,7 @@ test("the registry allowlists exactly the eight tools, all read-only with correc
   assert.equal(tool("compare_routes").providerCalls, 3);
   assert.equal(tool("get_traffic").providerCalls, 2);
   assert.equal(tool("get_weather").providerCalls, 1);
+  assert.equal(tool("get_trip_advice").providerCalls, 3);
   assert.equal(tool("find_nearby_activities").providerCalls, 1);
   assert.equal(tool("find_nearby_restaurants").providerCalls, 1);
   // Tools that call a paid provider run one at a time.
@@ -530,6 +535,7 @@ test("the registry allowlists exactly the eight tools, all read-only with correc
     "compare_routes",
     "get_weather",
     "get_traffic",
+    "get_trip_advice",
     "find_nearby_activities",
     "find_nearby_restaurants",
   ]) {
@@ -1260,4 +1266,81 @@ test("a plan that needs more provider calls than allowed is rejected before any 
     failed.code,
   );
   assert.equal(services.calls.length, 0);
+});
+
+// --- get_trip_advice -----------------------------------------------------------
+
+const adviceSnapshot = {
+  ...snapshot,
+  agenda: [
+    {
+      id: "agenda-1",
+      tripId: TRIP_ID,
+      contextPointId: "jcc",
+      title: "Opening keynote",
+      type: "conference",
+      startAt: "2026-11-12T09:00:00+07:00",
+      endAt: "2026-11-12T10:00:00+07:00",
+      timezone: "Asia/Jakarta",
+      status: "confirmed",
+      source: "user_input",
+      metadata: {},
+    },
+    {
+      id: "agenda-2",
+      tripId: TRIP_ID,
+      contextPointId: "hotel-1",
+      title: "Client dinner",
+      type: "meal",
+      startAt: "2026-11-12T18:00:00+07:00",
+      endAt: "2026-11-12T19:30:00+07:00",
+      timezone: "Asia/Jakarta",
+      status: "planned",
+      source: "user_input",
+      metadata: {},
+    },
+  ],
+};
+
+test("get_trip_advice: one day of agenda, weather and the ride, with a sourced travel tip", async () => {
+  const services = fakeServices();
+  const { orchestrator } = build({
+    plan: plan("get_trip_advice", "get_trip_advice", { date: "2026-11-12" }),
+    synth: synthesis("Leave earlier because rain is likely.", {
+      travel_tips: [
+        {
+          title: "Leave earlier",
+          detail: "Rain is likely, so keep extra time for the ride.",
+          source_ids: ["src-weather"],
+        },
+      ],
+    }),
+  });
+  const outcome = await orchestrator.run(
+    input("What should I know for 12 November?", services, {
+      snapshot: adviceSnapshot,
+    }),
+  );
+  assert.equal(outcome.intent, "get_trip_advice");
+  assert.equal(outcome.state, "completed");
+  assert.deepEqual(
+    services.calls.map((call) => call.tool),
+    ["getWeather", "compareRoutes"],
+  );
+  assert.equal(outcome.response.travel_tips.length, 1);
+  assert.equal(outcome.response.travel_tips[0].source_ids[0], "src-weather");
+  assert.ok(
+    outcome.response.cards.some((card) => card.type === "agenda"),
+    "the day's agenda is shown as cards",
+  );
+  assert.ok(
+    outcome.response.cards.some((card) => card.type === "weather"),
+    "the day's weather is shown as a card",
+  );
+  assert.ok(
+    outcome.response.facts.some(
+      (fact) => fact.label === "Getting between places",
+    ),
+    "the ride is reported as a fact",
+  );
 });

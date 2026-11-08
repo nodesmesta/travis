@@ -79,6 +79,11 @@ export interface AssistantResponse {
     confidence: "low" | "medium" | "high";
     source_ids: string[];
   }>;
+  travel_tips: Array<{
+    title: string;
+    detail: string;
+    source_ids: string[];
+  }>;
   clarification: {
     question: string;
     options: Array<{ id: string; label: string }>;

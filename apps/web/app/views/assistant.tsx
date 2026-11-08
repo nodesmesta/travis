@@ -71,12 +71,13 @@ function freshnessLabel(
   return `Data ${response.freshness_status} · retrieved ${formatWhen(response.retrieved_at, timezone)}`;
 }
 
-export default function AssistantView({
+export default function AssistantPanel({
   trip,
   contexts,
   context,
   onSelectContext,
-}: ViewProps) {
+  onClose,
+}: ViewProps & { onClose: () => void }) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,20 +252,33 @@ export default function AssistantView({
     .find((message) => message.role === "assistant");
 
   return (
-    <section className="panel asst-panel" aria-labelledby="assistant-title">
+    <section
+      className="panel asst-panel rail"
+      aria-labelledby="assistant-title"
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">ASSISTANT</p>
           <h2 id="assistant-title">Ask about {trip.name}</h2>
         </div>
-        <button
-          type="button"
-          className="button ghost"
-          onClick={() => void newConversation()}
-          disabled={sending}
-        >
-          New conversation
-        </button>
+        <div className="button-row">
+          <button
+            type="button"
+            className="button ghost"
+            onClick={() => void newConversation()}
+            disabled={sending}
+          >
+            New
+          </button>
+          <button
+            type="button"
+            className="button ghost"
+            onClick={onClose}
+            aria-label="Hide assistant"
+          >
+            Close
+          </button>
+        </div>
       </div>
       <p className="helper-text">
         Answers use your trip and live sources. The assistant never changes your
@@ -382,6 +396,16 @@ export default function AssistantView({
           onClick={() => void submit("Summarize my trip.", selectedId)}
         >
           Summarize my trip
+        </button>
+        <button
+          type="button"
+          className="button secondary"
+          disabled={sending}
+          onClick={() =>
+            void submit("What should I know about today?", selectedId)
+          }
+        >
+          Today&apos;s advice
         </button>
         <button
           type="button"
@@ -619,6 +643,20 @@ export default function AssistantView({
                       ))}
                     </ul>
                   ) : null}
+                  {response.travel_tips && response.travel_tips.length > 0 ? (
+                    <div className="asst-tips">
+                      <p className="asst-who">Travel tips</p>
+                      <ul>
+                        {response.travel_tips.map((tip) => (
+                          <li key={tip.title}>
+                            <strong>{tip.title}</strong>
+                            <br />
+                            {tip.detail}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   {response.confirmation_request ? (
                     <div className="asst-confirm-box">
                       <p>{response.confirmation_request.summary}</p>
@@ -740,7 +778,7 @@ export default function AssistantView({
           value={text}
           rows={2}
           maxLength={2000}
-          placeholder="Ask about routes, weather, traffic, nearby places, events, your agenda, or recommendations"
+          placeholder="Ask about routes, weather, traffic, nearby places, events, your agenda, recommendations, or today's travel tips"
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

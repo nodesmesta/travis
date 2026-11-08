@@ -2,8 +2,7 @@
 
 import AlertsView from "./views/alerts";
 import ActiveAlertsSummary from "./views/alerts-summary";
-import AssistantView from "./views/assistant";
-import BookingsView from "./views/bookings";
+import AssistantPanel from "./views/assistant";
 import InvoicesView from "./views/invoices";
 import ItineraryView from "./views/itinerary";
 import FlightsView from "./views/flights";
@@ -321,9 +320,7 @@ function ViewHost({
   return (
     <>
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
-      {view === "assistant" ? <AssistantView {...viewProps} /> : null}
       {view === "itinerary" ? <ItineraryView {...viewProps} /> : null}
-      {view === "bookings" ? <BookingsView {...viewProps} /> : null}
       {view === "alerts" ? <AlertsView {...viewProps} /> : null}
       {view === "invoices" ? <InvoicesView {...viewProps} /> : null}
     </>
@@ -340,6 +337,21 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewId>("explore");
   const [exploreMode, setExploreMode] = useState<ExploreMode>("stays");
+  const [assistantOpen, setAssistantOpen] = useState(false);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("travis.assistant.open");
+    const wide = window.matchMedia("(min-width: 1121px)").matches;
+    setAssistantOpen(stored === null ? wide : stored === "true");
+  }, []);
+
+  function toggleAssistant() {
+    setAssistantOpen((current) => {
+      const next = !current;
+      window.localStorage.setItem("travis.assistant.open", String(next));
+      return next;
+    });
+  }
 
   function showView(next: ViewId) {
     setView(next);
@@ -515,6 +527,16 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
         <div className="topbar-actions">
           <button
             className="button ghost"
+            aria-controls="assistant-panel"
+            aria-expanded={assistantOpen}
+            disabled={!trip}
+            onClick={toggleAssistant}
+            type="button"
+          >
+            {assistantOpen ? "Hide assistant" : "Assistant"}
+          </button>
+          <button
+            className="button ghost"
             onClick={() => void onSignOut()}
             type="button"
           >
@@ -523,7 +545,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
         </div>
       </header>
       <div
-        className="workspace-grid two-column"
+        className={`workspace-grid ${assistantOpen && trip ? "with-assistant" : "two-column"}`}
       >
         <aside className="sidebar">
           <nav className="side-nav" aria-label="Workspace navigation">
@@ -570,7 +592,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                   onSelectContext={(point) => setContext(point)}
                   onEnsureTrip={ensureTrip}
                   onOpenInvoices={() => showView("invoices")}
-                  onOpenBookings={() => showView("bookings")}
                   onOpenTrips={() => showView("trips")}
                 />
               ) : (
@@ -581,7 +602,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                   onSelectContext={(point) => setContext(point)}
                   onEnsureTrip={ensureTrip}
                   onOpenInvoices={() => showView("invoices")}
-                  onOpenBookings={() => showView("bookings")}
                   onOpenTrips={() => showView("trips")}
                 />
               )}
@@ -598,7 +618,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 onSelectTrip={(id) => void selectTrip(id)}
                 onTripsChanged={reloadTrips}
                 onContextsChanged={reloadContexts}
-                onOpenBookings={() => showView("bookings")}
               />
             </>
           ) : trip ? (
@@ -614,7 +633,6 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 onTripsChanged: reloadTrips,
                 onContextsChanged: reloadContexts,
                 onOpenInvoices: () => showView("invoices"),
-                onOpenBookings: () => showView("bookings"),
               }}
               error={error}
             />
@@ -624,7 +642,29 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
             </StatusBanner>
           )}
         </section>
+        {assistantOpen && trip ? (
+          <aside
+            className="assistant-rail"
+            id="assistant-panel"
+            aria-label="Assistant"
+          >
+            <AssistantPanel
+              trip={trip}
+              contexts={contexts}
+              context={context}
+              onSelectContext={(point) => setContext(point)}
+              onClose={() => setAssistantOpen(false)}
+            />
+          </aside>
+        ) : null}
       </div>
+      {assistantOpen && trip ? (
+        <div
+          className="assistant-scrim"
+          aria-hidden="true"
+          onClick={() => setAssistantOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

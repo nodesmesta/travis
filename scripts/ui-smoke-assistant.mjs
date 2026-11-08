@@ -201,6 +201,13 @@ try {
     ],
     facts: [],
     recommendations: [],
+    travel_tips: [
+      {
+        title: "[ui-smoke fixture] Leave earlier",
+        detail: "Allow extra time for the ride.",
+        source_ids: [sourceId],
+      },
+    ],
     clarification: null,
     confirmation_request: null,
     sources: [
@@ -252,12 +259,8 @@ try {
   });
 
   await step(
-    "open the Assistant view and choose the Jakarta Convention Center",
+    "open the assistant panel and choose the Jakarta Convention Center",
     async () => {
-      await page
-        .getByRole("navigation", { name: "Workspace navigation" })
-        .getByRole("link", { name: "Assistant" })
-        .click();
       await page
         .getByRole("heading", { name: "Ask about" })
         .waitFor({ timeout: 30_000 });
@@ -269,6 +272,9 @@ try {
         .locator(".asst-msg.assistant")
         .first()
         .waitFor({ timeout: 30_000 });
+      await page
+        .locator(".asst-tips", { hasText: "[ui-smoke fixture] Leave earlier" })
+        .waitFor({ timeout: 10_000 });
       await shot("1-assistant-opened");
     },
   );

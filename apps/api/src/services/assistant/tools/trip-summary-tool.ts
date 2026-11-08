@@ -59,9 +59,7 @@ export function createTripSummaryTool(
         snapshot.contextPoints.map((point) => [point.id, point.label]),
       );
       const timezone = snapshot.trip.timezone;
-      const bookings = wants("bookings")
-        ? await runtime.services.listBookings(runtime.tripId)
-        : [];
+      const bookings = wants("bookings") ? runtime.snapshot.bookings : [];
 
       const agenda = wants("agenda") ? snapshot.agenda : [];
       const cards: AssistantCard[] = agenda

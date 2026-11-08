@@ -17,8 +17,6 @@ export interface ViewProps {
   onContextsChanged?: () => Promise<void>;
   /** Opens the Invoices view, for the "View invoice" links after a payment succeeds. */
   onOpenInvoices?: () => void;
-  /** Opens the Bookings view, for the "All reservations" links after a provider booking. */
-  onOpenBookings?: () => void;
 }
 
 /** The Trips view must also work for a user who has no trip yet. */
@@ -49,16 +47,13 @@ export interface ExploreViewProps {
   onSelectContext: (point: ContextPoint) => void;
   onEnsureTrip: (input: EnsureTripInput) => Promise<Trip>;
   onOpenInvoices?: () => void;
-  onOpenBookings?: () => void;
   /** The trip the booking lands in; opens the Trips view. */
   onOpenTrips?: () => void;
 }
 
 export type ViewId =
   | "explore"
-  | "assistant"
   | "itinerary"
-  | "bookings"
   | "alerts"
   | "invoices"
   | "trips";
@@ -69,9 +64,7 @@ export const VIEWS: Array<{ id: ViewId; label: string; hint: string }> = [
     label: "Explore",
     hint: "Stays and flights",
   },
-  { id: "bookings", label: "Bookings", hint: "Your reservations" },
   { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
-  { id: "assistant", label: "Assistant", hint: "Ask about your trip" },
   { id: "alerts", label: "Alerts", hint: "What changed" },
   { id: "invoices", label: "Invoices", hint: "Receipts and email" },
   { id: "trips", label: "Trips", hint: "Set up trip context" },

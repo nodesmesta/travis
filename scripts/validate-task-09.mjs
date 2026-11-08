@@ -390,6 +390,7 @@ try {
         "find_nearby_restaurants",
         "get_recommendations",
         "get_traffic",
+        "get_trip_advice",
         "get_trip_summary",
         "get_weather",
       ]);
@@ -1529,6 +1530,7 @@ try {
         return {
           message: extra.message ?? "Here is what the data shows.",
           recommendations: [],
+          travel_tips: [],
           limitations: [],
           follow_up_actions: [],
           recommended_option_id: locked.recommended_option_id ?? null,

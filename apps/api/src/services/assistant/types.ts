@@ -24,6 +24,7 @@ export interface TripSnapshotData {
   contextPoints: ContextPointRecord[];
   agenda: AgendaItemRecord[];
   journeyLegs: JourneyLegRecord[];
+  bookings: Booking[];
 }
 
 /** A source as the mobility and place services report it. */

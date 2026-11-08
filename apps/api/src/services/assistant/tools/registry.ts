@@ -10,6 +10,7 @@ import { createRecommendationReadTool } from "./recommendation-tool.js";
 import { createCompareRoutesTool } from "./route-tool.js";
 import { createTrafficTool } from "./traffic-tool.js";
 import { createTripSummaryTool } from "./trip-summary-tool.js";
+import { createTripAdviceTool } from "./trip-advice-tool.js";
 import { createWeatherTool } from "./weather-tool.js";
 
 /**
@@ -26,6 +27,7 @@ export function createAssistantToolRegistry(
   return new ToolRegistry<ToolRuntime>()
     .register(createEventDiscoveryTool(config.aiEventToolTimeoutMs))
     .register(createTripSummaryTool(config.aiToolTimeoutMs))
+    .register(createTripAdviceTool(config.aiEventToolTimeoutMs))
     .register(createRecommendationReadTool(config.aiToolTimeoutMs))
     .register(createCompareRoutesTool(config.aiMobilityToolTimeoutMs))
     .register(createWeatherTool(config.aiMobilityToolTimeoutMs))
