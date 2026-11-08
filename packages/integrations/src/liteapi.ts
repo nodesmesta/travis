@@ -99,6 +99,8 @@ export interface FlightOffer {
   baggage: {
     cabin: FlightBaggage | null;
     checked: FlightBaggage | null;
+    /** The carrier's paid checked bag, when the fare does not include one. */
+    paid_checked: FlightBaggage | null;
   };
 }
 
@@ -643,6 +645,54 @@ export interface LiteCountry {
   name: string;
 }
 
+/** One airport the flight search accepts as an origin or destination. */
+export interface LiteAirport {
+  iata: string;
+  icao: string | null;
+  name: string;
+  city: string;
+  country: string;
+  state: string | null;
+  lat: number | null;
+  lon: number | null;
+  timezone: string | null;
+  /** False for city aggregates such as "Jakarta - All Airports". */
+  has_airline_service: boolean;
+}
+
+/**
+ * `GET /data/flights/airports?q=`: the provider only answers a text query, so a
+ * country is looked up by its name and the results are filtered to that country.
+ */
+export function normalizeAirports(result: ProviderJson): LiteAirport[] {
+  const root = asRecord(result.json);
+  const airports: LiteAirport[] = [];
+  const seen = new Set<string>();
+  for (const entry of array(root?.data, "data")) {
+    const group = asRecord(entry);
+    for (const item of Array.isArray(group?.airports) ? group.airports : []) {
+      const row = asRecord(item);
+      const iata = nonBlankString(row?.iata)?.toUpperCase();
+      const name = nonBlankString(row?.name);
+      if (!iata || !name || iata.length !== 3 || seen.has(iata)) continue;
+      seen.add(iata);
+      airports.push({
+        iata,
+        icao: nonBlankString(row?.icao)?.toUpperCase() ?? null,
+        name,
+        city: nonBlankString(row?.city) ?? "",
+        country: nonBlankString(row?.country)?.toUpperCase() ?? "",
+        state: nonBlankString(row?.state) ?? null,
+        lat: finiteNumber(row?.lat),
+        lon: finiteNumber(row?.lon),
+        timezone: nonBlankString(row?.tz) ?? null,
+        has_airline_service: row?.hasAirlineService !== false,
+      });
+    }
+  }
+  return airports;
+}
+
 /** `GET /data/countries`: the countries that have hotel inventory. */
 export function normalizeCountries(result: ProviderJson): LiteCountry[] {
   const root = asRecord(result.json);
@@ -741,6 +791,20 @@ export class LiteApiClient {
       "LiteAPI countries",
     );
     return normalizeCountries(result);
+  }
+
+  /** `GET /data/flights/airports?q=`: airports matching a city, country or code. */
+  public async searchAirports(query: string): Promise<LiteAirport[]> {
+    const text = query.trim();
+    if (text.length < 2) {
+      throw queryInvalid("q must be at least 2 characters.");
+    }
+    const result = await this.request(
+      "GET",
+      `/data/flights/airports?q=${encodeURIComponent(text)}`,
+      "LiteAPI airports",
+    );
+    return normalizeAirports(result);
   }
 
   /** `GET /data/cities?countryCode=ID`: the cities with hotel inventory. */
@@ -1334,6 +1398,7 @@ function normalizeFlightOffer(value: unknown): FlightOffer {
     baggage: {
       cabin: baggageAllowance(baggage?.included, "cabin"),
       checked: baggageAllowance(baggage?.included, "checked"),
+      paid_checked: baggageAllowance(baggage?.paid, "checked"),
     },
   };
 }

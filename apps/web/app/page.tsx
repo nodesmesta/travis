@@ -600,6 +600,7 @@ function Workspace({ onSignOut }: { onSignOut: () => Promise<void> }) {
                 onSelectTrip={(id) => void selectTrip(id)}
                 onTripsChanged={reloadTrips}
                 onContextsChanged={reloadContexts}
+                onOpenBookings={() => showView("bookings")}
               />
             </>
           ) : trip ? (
