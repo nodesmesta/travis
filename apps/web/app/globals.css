@@ -3496,3 +3496,160 @@ body {
     display: none;
   }
 }
+
+/* ---------- Rooms, with their own photos and every rate ----------
+   A room is the unit the traveller chooses, so the room shows its photos and
+   facts first, and each rate the provider sells for it sits underneath. */
+
+.room-card {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: white;
+}
+
+.room-photos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.room-photo-main,
+.room-photo-strip button {
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #eef1ff;
+  cursor: zoom-in;
+}
+
+.room-photo-main {
+  height: 120px;
+}
+
+.room-photo-main img,
+.room-photo-strip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.room-photo-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.room-photo-strip button {
+  height: 56px;
+}
+
+.room-photos.empty {
+  display: grid;
+  place-items: center;
+  height: 120px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.room-photos-more {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--indigo-dark);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.room-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-facts-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.room-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.room-offer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfbfe;
+}
+
+.offer-terms {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.offer-cancel {
+  color: #2c6f52;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+/* A restriction must not wear the same green as a free cancellation. */
+.offer-cancel.strict {
+  color: #8a6d3b;
+}
+
+.offer-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.offer-buy {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+
+.offer-buy strong {
+  font-size: 16px;
+}
+
+@media (max-width: 760px) {
+  .room-card {
+    grid-template-columns: 1fr;
+  }
+
+  .room-offer {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-buy {
+    align-items: flex-start;
+    text-align: left;
+  }
+}

@@ -92,6 +92,10 @@ export interface HotelContent {
   rooms: HotelRoomContent[];
 }
 
+export interface HotelCancellationStep {
+  before: string | null;
+  fee: HotelMoney | null;
+}
 export interface HotelOffer {
   offer_id: string;
   room_name: string;
@@ -100,6 +104,28 @@ export interface HotelOffer {
   taxes_included: number | null;
   refundable: "refundable" | "non_refundable" | "unknown";
   free_cancellation_until: string | null;
+  max_occupancy: number | null;
+  adults: number | null;
+  children: number | null;
+  perks: string[];
+  supplier: string | null;
+  payment_types: string[];
+  cancellation: { tag: string | null; steps: HotelCancellationStep[] };
+}
+
+/** A room the provider sells for these nights, with the content it matched. */
+export interface HotelRateGroup {
+  key: string;
+  name: string;
+  room: HotelRoomContent | null;
+  offers: HotelOffer[];
+}
+export interface HotelRoomOptions {
+  hotel_id: string;
+  hotel_name: string;
+  nights: number;
+  offer_count: number;
+  groups: HotelRateGroup[];
 }
 export interface HotelSearchResponse {
   hotels: Array<{
@@ -347,6 +373,33 @@ export function attachFlightSeats(
 }
 
 /** Everything the provider holds about one hotel, plus its latest reviews. */
+/** Every rate the provider sells for one hotel on these dates, grouped by room. */
+export function getHotelRoomOptions(
+  hotelId: string,
+  params: {
+    city: string;
+    country: string;
+    checkin: string;
+    checkout: string;
+    adults: number;
+    currency?: string;
+  },
+): Promise<HotelRoomOptions> {
+  const query = [
+    `city=${encodeURIComponent(params.city)}`,
+    `country=${encodeURIComponent(params.country)}`,
+    `checkin=${encodeURIComponent(params.checkin)}`,
+    `checkout=${encodeURIComponent(params.checkout)}`,
+    `adults=${params.adults}`,
+    params.currency ? `currency=${encodeURIComponent(params.currency)}` : "",
+  ]
+    .filter((part) => part.length > 0)
+    .join("&");
+  return request(
+    `/places/hotels/${encodeURIComponent(hotelId)}/rates?${query}`,
+  ) as Promise<HotelRoomOptions>;
+}
+
 export function getHotelDetails(
   hotelId: string,
 ): Promise<{ hotel: HotelContent; reviews: HotelReview[] }> {

@@ -302,3 +302,152 @@ export function PhotoSheet({
     </div>
   );
 }
+
+/**
+ * The photos of one room. Three are shown next to the room name and the rest sit
+ * behind the counter, because a room card should show what the room looks like
+ * without opening anything.
+ */
+export function RoomPhotos({
+  photos,
+  name,
+}: {
+  photos: string[];
+  name: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [index, setIndex] = useState(0);
+  if (photos.length === 0)
+    return (
+      <div className="room-photos empty" aria-hidden="true">
+        <span>No room photo</span>
+      </div>
+    );
+  const shown = photos.slice(0, 3);
+  return (
+    <div className="room-photos">
+      <button
+        className="room-photo-main"
+        onClick={() => {
+          setIndex(0);
+          setOpen(true);
+        }}
+        type="button"
+      >
+        <img alt={name} src={shown[0] as string} />
+      </button>
+      {shown.length > 1 ? (
+        <div className="room-photo-strip">
+          {shown.slice(1).map((url, position) => (
+            <button
+              key={url}
+              onClick={() => {
+                setIndex(position + 1);
+                setOpen(true);
+              }}
+              type="button"
+            >
+              <img alt={`${name} ${position + 2}`} src={url} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {photos.length > shown.length ? (
+        <button
+          className="room-photos-more"
+          onClick={() => {
+            setIndex(0);
+            setOpen(true);
+          }}
+          type="button"
+        >
+          {photos.length} photos
+        </button>
+      ) : null}
+      {open ? (
+        <RoomPhotoSheet
+          index={index}
+          name={name}
+          onClose={() => setOpen(false)}
+          onPick={setIndex}
+          photos={photos}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function RoomPhotoSheet({
+  photos,
+  name,
+  index,
+  onPick,
+  onClose,
+}: {
+  photos: string[];
+  name: string;
+  index: number;
+  onPick: (index: number) => void;
+  onClose: () => void;
+}) {
+  const image = photos[index];
+  return (
+    <div className="photo-sheet" role="dialog" aria-label={`${name} photos`}>
+      <button className="photo-sheet-close" onClick={onClose} type="button">
+        Close
+      </button>
+      {image ? <img alt={name} className="photo-sheet-main" src={image} /> : null}
+      <div className="photo-sheet-strip">
+        {photos.map((url, position) => (
+          <button
+            aria-label={`Photo ${position + 1}`}
+            className={`photo-sheet-thumb ${position === index ? "active" : ""}`}
+            key={url}
+            onClick={() => onPick(position)}
+            type="button"
+          >
+            <img alt="" src={url} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The provider's own room description, size, beds and amenities, always open. */
+export function RoomFactsInline({ room }: { room: HotelRoomContent | null }) {
+  if (!room) return null;
+  const facts = [
+    room.size_square !== null
+      ? `${room.size_square} ${room.size_unit ?? "sqm"}`
+      : null,
+    room.max_occupancy !== null ? `sleeps ${room.max_occupancy}` : null,
+    ...room.bed_types.map(
+      (bed) => `${bed.quantity} × ${bed.bed_type.toLowerCase()}`,
+    ),
+  ].filter((value): value is string => value !== null);
+  return (
+    <div className="room-facts-inline">
+      {facts.length > 0 ? (
+        <p className="event-meta">{facts.join(" · ")}</p>
+      ) : null}
+      {room.description ? (
+        <p className="fact-text">{room.description}</p>
+      ) : null}
+      {room.amenities.length > 0 ? (
+        <span className="chip-row">
+          {room.amenities.slice(0, 12).map((amenity) => (
+            <span className="chip" key={amenity}>
+              {amenity}
+            </span>
+          ))}
+          {room.amenities.length > 12 ? (
+            <span className="chip muted">
+              +{room.amenities.length - 12} more
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </div>
+  );
+}
