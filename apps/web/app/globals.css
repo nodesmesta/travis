@@ -4032,3 +4032,107 @@ body {
 .asst-tips li strong {
   color: var(--teal-dark);
 }
+
+/* ---- Advice from tickets ---- */
+.adv-view {
+  display: grid;
+  gap: 18px;
+}
+
+.adv-tickets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.adv-ticket {
+  display: grid;
+  gap: 4px;
+  min-width: 210px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.adv-ticket strong {
+  font-size: 14px;
+}
+
+.adv-ticket small,
+.adv-source,
+.adv-events small,
+.adv-bookings small {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.adv-places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.adv-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.adv-card-head {
+  display: grid;
+  gap: 4px;
+}
+
+.adv-card-head h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.adv-lead {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.adv-events,
+.adv-bookings ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.adv-events li {
+  display: grid;
+  gap: 3px;
+}
+
+.adv-events a {
+  color: var(--teal-dark);
+  font-size: 12px;
+}
+
+.adv-bookings {
+  display: grid;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+@media (max-width: 760px) {
+  .adv-grid {
+    grid-template-columns: 1fr;
+  }
+}

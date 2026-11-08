@@ -52,17 +52,18 @@ export interface ExploreViewProps {
 }
 
 export type ViewId =
-  | "explore"
-  | "itinerary"
-  | "alerts"
-  | "invoices"
-  | "trips";
+  "explore" | "advice" | "itinerary" | "alerts" | "invoices" | "trips";
 
 export const VIEWS: Array<{ id: ViewId; label: string; hint: string }> = [
   {
     id: "explore",
     label: "Explore",
     hint: "Stays and flights",
+  },
+  {
+    id: "advice",
+    label: "Advice",
+    hint: "Automatic advice from your tickets",
   },
   { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
   { id: "alerts", label: "Alerts", hint: "What changed" },

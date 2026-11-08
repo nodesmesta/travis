@@ -2,6 +2,7 @@
 
 import AlertsView from "./views/alerts";
 import ActiveAlertsSummary from "./views/alerts-summary";
+import AdviceView from "./views/advice";
 import AssistantPanel from "./views/assistant";
 import InvoicesView from "./views/invoices";
 import ItineraryView from "./views/itinerary";
@@ -320,6 +321,7 @@ function ViewHost({
   return (
     <>
       {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+      {view === "advice" ? <AdviceView {...viewProps} /> : null}
       {view === "itinerary" ? <ItineraryView {...viewProps} /> : null}
       {view === "alerts" ? <AlertsView {...viewProps} /> : null}
       {view === "invoices" ? <InvoicesView {...viewProps} /> : null}
