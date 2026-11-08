@@ -29,6 +29,69 @@ export interface HotelStay {
   review_count: number | null;
   photo_url: string | null;
 }
+export interface HotelRoomContent {
+  room_id: string;
+  name: string;
+  description: string | null;
+  size_square: number | null;
+  size_unit: string | null;
+  max_adults: number | null;
+  max_children: number | null;
+  max_occupancy: number | null;
+  bed_types: Array<{ quantity: number; bed_type: string }>;
+  amenities: string[];
+  photos: string[];
+}
+
+export interface HotelReview {
+  review_id: string;
+  score: number;
+  date: string | null;
+  country: string | null;
+  traveller_type: string | null;
+  name: string | null;
+  headline: string | null;
+  pros: string | null;
+  cons: string | null;
+  language: string | null;
+}
+
+export interface HotelContent {
+  hotel_id: string;
+  name: string;
+  description: string | null;
+  important_information: string | null;
+  address: string | null;
+  city: string | null;
+  country_code: string | null;
+  zip: string | null;
+  stars: number | null;
+  rating: number | null;
+  review_count: number | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  chain: string | null;
+  hotel_type: string | null;
+  airport_code: string | null;
+  currency: string | null;
+  checkin_from: string | null;
+  checkin_until: string | null;
+  checkout_until: string | null;
+  minimum_check_in_age: number | null;
+  images: Array<{ url: string; caption: string | null }>;
+  facilities: string[];
+  policies: string[];
+  nearby: Array<{
+    name: string;
+    category: string | null;
+    distance_km: number | null;
+    importance: string | null;
+  }>;
+  sentiment: { pros: string[]; cons: string[] };
+  rooms: HotelRoomContent[];
+}
+
 export interface HotelOffer {
   offer_id: string;
   room_name: string;
@@ -73,7 +136,24 @@ export interface FlightSegment {
   departs_local: string;
   arrives_local: string;
   duration_minutes: number;
+  operating_carrier_name: string | null;
+  carrier_logo: string | null;
+  stops_within_segment: number | null;
 }
+export interface FlightBaggage {
+  description: string | null;
+  pieces: number | null;
+  weight_kg: number | null;
+  size: string | null;
+  price: HotelMoney | null;
+}
+
+export interface FlightFareTerms {
+  changeable: boolean;
+  refundable: boolean;
+  messages: string[];
+}
+
 export interface FlightOffer {
   offer_id: string;
   expires_at: string;
@@ -86,12 +166,15 @@ export interface FlightOffer {
   seats_remaining: number | null;
   carry_on_included: boolean;
   checked_bag_included: boolean;
+  terms: FlightFareTerms | null;
+  baggage: { cabin: FlightBaggage | null; checked: FlightBaggage | null };
 }
 export interface FlightJourney {
   journey_key: string;
   segments: FlightSegment[];
   stops: number;
   duration_minutes: number;
+  overnight: boolean;
   /** Every fare on sale for this itinerary, cheapest first. */
   offers: FlightOffer[];
   cheapest: FlightOffer;
@@ -261,6 +344,15 @@ export function attachFlightSeats(
     { seats },
     true,
   );
+}
+
+/** Everything the provider holds about one hotel, plus its latest reviews. */
+export function getHotelDetails(
+  hotelId: string,
+): Promise<{ hotel: HotelContent; reviews: HotelReview[] }> {
+  return request(
+    `/places/hotels/${encodeURIComponent(hotelId)}`,
+  ) as Promise<{ hotel: HotelContent; reviews: HotelReview[] }>;
 }
 
 export function bookFlight(

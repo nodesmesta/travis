@@ -58,6 +58,26 @@ export interface FlightSegment {
   departs_local: string;
   arrives_local: string;
   duration_minutes: number;
+  /** Who actually flies the leg, when it differs from the seller. */
+  operating_carrier_name: string | null;
+  carrier_logo: string | null;
+  stops_within_segment: number | null;
+}
+
+export interface FlightBaggage {
+  description: string | null;
+  pieces: number | null;
+  weight_kg: number | null;
+  size: string | null;
+  /** What a bag of this kind costs when it is not in the fare. */
+  price: Money | null;
+}
+
+export interface FlightFareTerms {
+  changeable: boolean;
+  refundable: boolean;
+  /** The provider's own sentences, e.g. "Change fee: from 57.93 SGD". */
+  messages: string[];
 }
 
 export interface FlightOffer {
@@ -73,6 +93,13 @@ export interface FlightOffer {
   seats_remaining: number | null;
   carry_on_included: boolean;
   checked_bag_included: boolean;
+  /** Refund and change rules as the carrier states them. */
+  terms: FlightFareTerms | null;
+  /** What the fare carries and what an extra bag costs. */
+  baggage: {
+    cabin: FlightBaggage | null;
+    checked: FlightBaggage | null;
+  };
 }
 
 export interface FlightJourney {
@@ -80,6 +107,8 @@ export interface FlightJourney {
   segments: FlightSegment[];
   stops: number;
   duration_minutes: number;
+  /** True when the itinerary crosses a night, as the provider flags it. */
+  overnight: boolean;
   /** Every fare on sale for this itinerary, cheapest first. `cheapest` is `offers[0]`. */
   offers: FlightOffer[];
   cheapest: FlightOffer;
@@ -105,6 +134,69 @@ export interface HotelStay {
   rating: number | null;
   review_count: number | null;
   photo_url: string | null;
+}
+
+export interface HotelRoomContent {
+  room_id: string;
+  name: string;
+  description: string | null;
+  size_square: number | null;
+  size_unit: string | null;
+  max_adults: number | null;
+  max_children: number | null;
+  max_occupancy: number | null;
+  bed_types: Array<{ quantity: number; bed_type: string }>;
+  amenities: string[];
+  photos: string[];
+}
+
+export interface HotelReview {
+  review_id: string;
+  score: number;
+  date: string | null;
+  country: string | null;
+  traveller_type: string | null;
+  name: string | null;
+  headline: string | null;
+  pros: string | null;
+  cons: string | null;
+  language: string | null;
+}
+
+export interface HotelContent {
+  hotel_id: string;
+  name: string;
+  description: string | null;
+  important_information: string | null;
+  address: string | null;
+  city: string | null;
+  country_code: string | null;
+  zip: string | null;
+  stars: number | null;
+  rating: number | null;
+  review_count: number | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  chain: string | null;
+  hotel_type: string | null;
+  airport_code: string | null;
+  currency: string | null;
+  checkin_from: string | null;
+  checkin_until: string | null;
+  checkout_until: string | null;
+  minimum_check_in_age: number | null;
+  images: Array<{ url: string; caption: string | null }>;
+  facilities: string[];
+  policies: string[];
+  nearby: Array<{
+    name: string;
+    category: string | null;
+    distance_km: number | null;
+    importance: string | null;
+  }>;
+  sentiment: { pros: string[]; cons: string[] };
+  rooms: HotelRoomContent[];
 }
 
 export interface HotelOffer {
@@ -704,6 +796,32 @@ export class LiteApiClient {
     return normalizeHotelSearch(result, limit);
   }
 
+  /** `GET /data/hotel`: everything the provider holds about one hotel. */
+  public async getHotelContent(hotelId: string): Promise<HotelContent> {
+    assertProviderId(hotelId, "hotel id");
+    const result = await this.request(
+      "GET",
+      `/data/hotel?hotelId=${encodeURIComponent(hotelId)}`,
+      "LiteAPI hotel content",
+    );
+    return normalizeHotelContent(result);
+  }
+
+  /** `GET /data/reviews`: what guests wrote about the hotel, newest first. */
+  public async getHotelReviews(
+    hotelId: string,
+    limit = 10,
+  ): Promise<HotelReview[]> {
+    assertProviderId(hotelId, "hotel id");
+    const capped = Math.min(Math.max(limit, 1), 50);
+    const result = await this.request(
+      "GET",
+      `/data/reviews?hotelId=${encodeURIComponent(hotelId)}&limit=${capped}`,
+      "LiteAPI hotel reviews",
+    );
+    return normalizeHotelReviews(result);
+  }
+
   // -------------------------------------------------------------------------
   // Booking. The sandbox key pays with the hidden test card (`ACC_CREDIT_CARD`), so
   // nothing is charged. The customer-facing payment step is ours; see the dummy
@@ -984,12 +1102,17 @@ function normalizeJourney(value: unknown): FlightJourney {
   }
   const segments = segmentsRaw.map(normalizeSegment);
   const total = asRecord(journey?.totalDuration);
+  const legs = Array.isArray(journey?.legDurations) ? journey.legDurations : [];
+  const overnight = legs.some(
+    (leg) => asRecord(leg)?.overnightFlight === true,
+  );
   const offers = flightOffers(journey);
   return {
     journey_key: required(nonBlankString(journey?.journeyKey), "journeyKey"),
     segments,
     stops: segments.length - 1,
     duration_minutes: nonNegative(total?.minutes, "journey duration"),
+    overnight,
     offers,
     cheapest: offers[0] as FlightOffer,
   };
@@ -1047,6 +1170,9 @@ function normalizeSegment(value: unknown): FlightSegment {
     departs_local: localTime(segment?.departureTime, "departure time"),
     arrives_local: localTime(segment?.arrivalTime, "arrival time"),
     duration_minutes: nonNegative(duration?.minutes, "segment duration"),
+    operating_carrier_name: nonBlankString(carrier?.operatingName),
+    carrier_logo: nonBlankString(carrier?.marketingLogo),
+    stops_within_segment: finiteNumber(segment?.stopCount),
   };
 }
 
@@ -1058,6 +1184,7 @@ function normalizeFlightOffer(value: unknown): FlightOffer {
     "offer price",
   );
   const baggage = asRecord(offer?.baggage);
+  const terms = asRecord(offer?.terms);
   const fare = asRecord(offer?.fare);
   const fares = Array.isArray(offer?.segmentFares) ? offer.segmentFares : [];
   const firstFare = asRecord(fares[0]);
@@ -1073,7 +1200,47 @@ function normalizeFlightOffer(value: unknown): FlightOffer {
     seats_remaining: finiteNumber(fare?.seatsRemaining),
     carry_on_included: baggage?.hasCarryOnBag === true,
     checked_bag_included: baggage?.hasCheckedBag === true,
+    terms: fareTerms(terms),
+    baggage: {
+      cabin: baggageAllowance(baggage?.included, "cabin"),
+      checked: baggageAllowance(baggage?.included, "checked"),
+    },
   };
+}
+
+function fareTerms(
+  terms: Record<string, unknown> | null,
+): FlightFareTerms | null {
+  if (!terms) return null;
+  const messages: string[] = [];
+  for (const entry of Array.isArray(terms.summary) ? terms.summary : []) {
+    const message = nonBlankString(asRecord(entry)?.message);
+    if (message) messages.push(message);
+  }
+  return {
+    changeable: terms.changeable === true,
+    refundable: terms.refundable === true,
+    messages,
+  };
+}
+
+/** The first allowance of `kind` the fare carries, with its weight and size. */
+function baggageAllowance(
+  included: unknown,
+  kind: "cabin" | "checked",
+): FlightBaggage | null {
+  for (const entry of Array.isArray(included) ? included : []) {
+    const bag = asRecord(entry);
+    if (nonBlankString(bag?.bagType)?.toLowerCase() !== kind) continue;
+    return {
+      description: nonBlankString(bag?.description),
+      pieces: finiteNumber(bag?.pieces),
+      weight_kg: finiteNumber(bag?.weightKg),
+      size: nonBlankString(bag?.size),
+      price: null,
+    };
+  }
+  return null;
 }
 
 export function normalizeHotelSearch(
@@ -1474,4 +1641,234 @@ export function normalizeFlightCancellation(
     fee: moneyFrom(data.cancellation_fee, data.currency, "cancellation fee"),
     refund: moneyFrom(data.refund_amount, data.currency, "refund amount"),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Hotel content and reviews
+
+export function normalizeHotelContent(result: ProviderJson): HotelContent {
+  const data = dataRecord(result, "hotel content");
+  const times = asRecord(data.checkinCheckoutTimes);
+  const attributes = asRecord(data.policyAttributes);
+  const location = asRecord(data.location);
+  const rating = finiteNumber(data.rating);
+  const stars = finiteNumber(data.starRating);
+  const rooms: HotelRoomContent[] = [];
+  for (const entry of Array.isArray(data.rooms) ? data.rooms : []) {
+    const room = asRecord(entry);
+    const roomId = nonBlankString(room?.id) ?? "";
+    const name = nonBlankString(room?.roomName);
+    if (!name) continue;
+    rooms.push({
+      room_id: String(roomId),
+      name,
+      description: plainText(room?.description),
+      size_square: finiteNumber(room?.roomSizeSquare),
+      size_unit: nonBlankString(room?.roomSizeUnit),
+      max_adults: finiteNumber(room?.maxAdults),
+      max_children: finiteNumber(room?.maxChildren),
+      max_occupancy: finiteNumber(room?.maxOccupancy),
+      bed_types: bedTypes(room?.bedTypes),
+      amenities: stringList(room?.roomAmenities, 20),
+      photos: photoUrls(room?.photos, 6),
+    });
+  }
+  const nearby: HotelContent["nearby"] = [];
+  for (const entry of Array.isArray(data.poi) ? data.poi : []) {
+    const poi = asRecord(entry);
+    const name = nonBlankString(poi?.name);
+    if (!name) continue;
+    nearby.push({
+      name,
+      category: nonBlankString(poi?.category),
+      distance_km: finiteNumber(poi?.distanceKm),
+      importance: nonBlankString(poi?.importance),
+    });
+  }
+  const sentiment = asRecord(data.sentiment_analysis);
+  return {
+    hotel_id: String(nonBlankString(data.id) ?? ""),
+    name: required(nonBlankString(data.name), "hotel name"),
+    description: plainText(data.hotelDescription),
+    important_information: plainText(data.hotelImportantInformation),
+    address: nonBlankString(data.address),
+    city: nonBlankString(data.city),
+    country_code: nonBlankString(data.country),
+    zip: nonBlankString(data.zip),
+    stars,
+    rating,
+    review_count: finiteNumber(data.reviewCount),
+    phone: nonBlankString(data.phone),
+    email: nonBlankString(data.email),
+    website: nonBlankString(data.website),
+    chain: nonBlankString(data.chain),
+    hotel_type: nonBlankString(data.hotelType),
+    airport_code: nonBlankString(data.airportCode),
+    currency: nonBlankString(data.currency),
+    checkin_from: nonBlankString(times?.checkin_start),
+    checkin_until: nonBlankString(times?.checkin_end),
+    checkout_until: nonBlankString(times?.checkout),
+    minimum_check_in_age: finiteNumber(attributes?.minimumCheckInAge),
+    images: images(data.hotelImages),
+    facilities: stringList(data.hotelFacilities ?? data.facilities, 40),
+    policies: policyNotes(attributes, data),
+    nearby: nearby.slice(0, 8),
+    sentiment: {
+      pros: stringList(sentiment?.pros, 6),
+      cons: stringList(sentiment?.cons, 6),
+    },
+    rooms,
+  };
+}
+
+export function normalizeHotelReviews(result: ProviderJson): HotelReview[] {
+  const root = asRecord(result.json);
+  const reviews: HotelReview[] = [];
+  for (const entry of Array.isArray(root?.data) ? root.data : []) {
+    const review = asRecord(entry);
+    const id = nonBlankString(review?.reviewId) ?? "";
+    const score = finiteNumber(review?.averageScore);
+    if (score === null) continue;
+    reviews.push({
+      review_id: String(id),
+      score,
+      date: nonBlankString(review?.date),
+      country: nonBlankString(review?.country),
+      traveller_type: nonBlankString(review?.type),
+      name: plainText(review?.name),
+      headline: plainText(review?.headline),
+      pros: plainText(review?.pros),
+      cons: plainText(review?.cons),
+      language: nonBlankString(review?.language),
+    });
+  }
+  return reviews;
+}
+
+/** Provider text arrives as HTML or with entities; keep the words only. */
+function plainText(value: unknown): string | null {
+  const text = nonBlankString(value);
+  if (!text) return null;
+  const decoded = decodeEntities(text);
+  let out = "";
+  let insideTag = false;
+  for (const char of decoded) {
+    if (char === "<") {
+      insideTag = true;
+      continue;
+    }
+    if (char === ">") {
+      insideTag = false;
+      out += " ";
+      continue;
+    }
+    if (!insideTag) out += char;
+  }
+  const collapsed = out.split("\n").join(" ");
+  let result = "";
+  let space = false;
+  for (const char of collapsed) {
+    if (char === " " || char === "\t" || char === "\r") {
+      space = true;
+      continue;
+    }
+    if (space && result.length > 0) result += " ";
+    space = false;
+    result += char;
+  }
+  const trimmed = result.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function decodeEntities(text: string): string {
+  const pairs: Array<[string, string]> = [
+    ["&nbsp;", " "],
+    ["&amp;", "&"],
+    ["&quot;", '"'],
+    ["&#39;", "'"],
+    ["&apos;", "'"],
+    ["&lt;", "<"],
+    ["&gt;", ">"],
+  ];
+  let out = text;
+  for (const [entity, character] of pairs) out = out.split(entity).join(character);
+  return out;
+}
+
+function stringList(value: unknown, limit: number): string[] {
+  const items: string[] = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    const text = plainText(entry) ?? plainText(asRecord(entry)?.name);
+    if (!text || items.includes(text)) continue;
+    items.push(text);
+    if (items.length >= limit) break;
+  }
+  return items;
+}
+
+function photoUrls(value: unknown, limit: number): string[] {
+  const urls: string[] = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    const url = nonBlankString(asRecord(entry)?.url);
+    if (!url || urls.includes(url)) continue;
+    urls.push(url);
+    if (urls.length >= limit) break;
+  }
+  return urls;
+}
+
+function images(value: unknown): Array<{ url: string; caption: string | null }> {
+  const items: Array<{ url: string; caption: string | null }> = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    const image = asRecord(entry);
+    const url = nonBlankString(image?.urlHd) ?? nonBlankString(image?.url);
+    if (!url) continue;
+    if (items.some((item) => item.url === url)) continue;
+    items.push({ url, caption: nonBlankString(image?.caption) });
+    if (items.length >= 12) break;
+  }
+  return items;
+}
+
+function bedTypes(value: unknown): Array<{ quantity: number; bed_type: string }> {
+  const beds: Array<{ quantity: number; bed_type: string }> = [];
+  for (const entry of Array.isArray(value) ? value : []) {
+    const bed = asRecord(entry);
+    const type = nonBlankString(bed?.bedType);
+    if (!type) continue;
+    beds.push({ quantity: finiteNumber(bed?.quantity) ?? 1, bed_type: type });
+  }
+  return beds;
+}
+
+/** The rules a traveller asks about, in plain sentences. */
+function policyNotes(
+  attributes: Record<string, unknown> | null,
+  data: Record<string, unknown>,
+): string[] {
+  const notes: string[] = [];
+  const children = asRecord(attributes?.children);
+  const pets = asRecord(attributes?.pets);
+  const wifi = asRecord(attributes?.wifi);
+  const parking = asRecord(attributes?.parking);
+  if (children?.allowed === true)
+    notes.push(
+      children?.cribAvailable === true
+        ? "Children allowed, cribs available"
+        : "Children allowed",
+    );
+  if (children?.allowed === false) notes.push("Children not allowed");
+  if (pets?.allowed === true) notes.push("Pets allowed");
+  if (pets?.allowed === false) notes.push("Pets not allowed");
+  if (data.petsAllowed === true && pets?.allowed !== true)
+    notes.push("Pets allowed");
+  if (data.petsAllowed === false && pets?.allowed !== false)
+    notes.push("Pets not allowed");
+  if (wifi?.free === true) notes.push("Free WiFi");
+  else if (wifi?.inRoom === true) notes.push("WiFi in rooms");
+  if (parking?.free === true || nonBlankString(data.parking) === "FREE")
+    notes.push("Free parking");
+  const minimumAge = finiteNumber(attributes?.minimumCheckInAge);
+  if (minimumAge !== null) notes.push(`Minimum check-in age ${minimumAge}`);
+  return notes;
 }
