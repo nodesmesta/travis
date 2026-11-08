@@ -520,9 +520,14 @@ export const placeRoutes: RouteModule = async (context) => {
     const from = { lat, lon };
     const nearbyLimit = 4;
     let airports: LiteAirport[] = [];
+    // The provider answers a text query loosely ("Jakarta Barat" also matched an
+    // airport named Jakar in Bhutan), so only this country's airports count.
+    const inCountry = (airport: LiteAirport) =>
+      place.country === null || airport.country === place.country;
     if (place.city) {
       const candidates = await airportsByQuery(context, place.city);
       airports = candidates
+        .filter(inCountry)
         .filter((airport) => airport.lat !== null && airport.lon !== null)
         .filter((airport) => airport.has_airline_service)
         .map((airport) => airport)
@@ -537,6 +542,7 @@ export const placeRoutes: RouteModule = async (context) => {
         const first = place.city.split(" ")[0] ?? place.city;
         const wider = await airportsByQuery(context, first);
         airports = wider
+          .filter(inCountry)
           .filter((airport) => airport.lat !== null && airport.lon !== null)
           .filter((airport) => airport.has_airline_service)
           .sort(
