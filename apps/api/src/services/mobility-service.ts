@@ -555,6 +555,16 @@ export class MobilityService {
       .filter((row): row is WeatherSnapshotRow => row !== undefined);
     return {
       request_id: input.requestId,
+      // The traveller reads places, not ids: every place the trip has, with the
+      // forecast when one exists, so a place without weather is still visible.
+      places: points.map((point) => ({
+        context_point_id: point.id,
+        label: point.label,
+        type: point.type,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        has_snapshot: latest.has(point.id),
+      })),
       items: items.map((row) => weatherDto(row, now)),
       missing_context_point_ids: points
         .filter((point) => !latest.has(point.id))
