@@ -5,7 +5,9 @@ import { ApiClientError, simulatePayment } from "../../lib/api";
 import {
   prebookHotel,
   bookHotel,
+  listCountries,
   searchHotels,
+  type PlaceCountry,
   type HotelOffer,
   type HotelPrebookAttempt,
   type HotelSearchResponse,
@@ -19,15 +21,14 @@ import {
   providerStateTone,
 } from "./provider-booking-parts";
 import {
-  CITIES,
   COUNTRIES,
   CURRENCIES,
-  countryForCity,
   countryLabel,
   guessCity,
   guessCountryCode,
   nightsBetween,
 } from "./places-options";
+import { CityPicker } from "./city-picker";
 import { GuestStepper, SearchField } from "./search-fields";
 import { useTraveller } from "./use-traveller";
 import type { ExploreViewProps } from "./types";
@@ -64,56 +65,77 @@ type HotelErrors = {
   checkout?: string;
 };
 
-function HotelCard({
+export function HotelRow({
   hotel,
+  nights,
   selected,
   busy,
   onPrebook,
 }: {
   hotel: HotelSearchResponse["hotels"][number];
+  nights: number;
   selected: boolean;
   busy: boolean;
   onPrebook: (offer: HotelOffer) => void;
 }) {
   const { hotel: details, cheapest } = hotel;
+  const refundable =
+    cheapest.refundable === "refundable"
+      ? "Refundable"
+      : cheapest.refundable === "non_refundable"
+        ? "Non-refundable"
+        : "Cancellation policy unavailable";
   return (
-    <article className={`event-card ${selected ? "selected" : ""}`}>
-      <div className="event-card-topline">
-        <span className="tag sage">
-          {details.stars ? `${details.stars} stars` : "Hotel"}
-        </span>
-        <span className="fresh-label">
-          {details.rating ? `Rating ${details.rating}` : "Rate available"}
-        </span>
+    <article className={`result-row ${selected ? "selected" : ""}`}>
+      <div className="result-media">
+        {details.photo_url ? (
+          // Provider photos are hot-linked; a broken one falls back to the panel.
+          <img alt={details.name} loading="lazy" src={details.photo_url} />
+        ) : (
+          <span aria-hidden="true" className="result-media-fallback">
+            {details.name.slice(0, 1)}
+          </span>
+        )}
       </div>
-      <h3>{details.name}</h3>
-      <p className="event-meta">
-        <span>⌖</span>{" "}
-        {details.address ?? details.city ?? "Location unavailable"}
-      </p>
-      <p className="event-meta">
-        <span>▣</span> {cheapest.room_name} · {money(cheapest.total)}
-      </p>
-      <p className="event-description">
-        {cheapest.board_name ?? "Board details unavailable"} ·{" "}
-        {cheapest.refundable === "refundable"
-          ? "Refundable"
-          : cheapest.refundable === "non_refundable"
-            ? "Non-refundable"
-            : "Cancellation policy unavailable"}
-      </p>
-      <button
-        className={`button ${selected ? "secondary" : "accent"} wide`}
-        disabled={busy || selected}
-        onClick={() => onPrebook(cheapest)}
-        type="button"
-      >
-        {selected
-          ? "Rate reserved"
-          : busy
-            ? "Reserving…"
-            : "Reserve this rate"}
-      </button>
+      <div className="result-body">
+        <div className="result-title">
+          <h3>{details.name}</h3>
+          {details.stars ? (
+            <span className="tag sage">{details.stars} stars</span>
+          ) : null}
+        </div>
+        <p className="event-meta">
+          <span>⌖</span>{" "}
+          {details.address ?? details.city ?? "Location unavailable"}
+        </p>
+        <p className="event-meta">
+          <span>▣</span> {cheapest.room_name}
+        </p>
+        <div className="result-tags">
+          <span>{cheapest.board_name ?? "Board details unavailable"}</span>
+          <span>{refundable}</span>
+          {details.rating ? (
+            <span>
+              Rating {details.rating}
+              {details.review_count ? ` · ${details.review_count} reviews` : ""}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="result-price">
+        <span className="result-price-label">
+          {nights > 1 ? `Total · ${nights} nights` : "Total"}
+        </span>
+        <strong>{money(cheapest.total)}</strong>
+        <button
+          className={`button ${selected ? "secondary" : "accent"} wide`}
+          disabled={busy || selected}
+          onClick={() => onPrebook(cheapest)}
+          type="button"
+        >
+          {selected ? "Rate reserved" : busy ? "Reserving…" : "Reserve"}
+        </button>
+      </div>
     </article>
   );
 }
@@ -136,6 +158,11 @@ export default function HotelsView({
   const [nationality, setNationality] = useState("ID");
   const [currency, setCurrency] = useState("USD");
   const [errors, setErrors] = useState<HotelErrors>({});
+  // The provider owns the country list; the static one is only a fallback for
+  // the moment before it arrives or when it cannot be reached.
+  const [countries, setCountries] = useState<PlaceCountry[]>(
+    COUNTRIES.map((country) => ({ code: country.code, name: country.label })),
+  );
   const [holderFirstName, setHolderFirstName] = useState("");
   const [holderLastName, setHolderLastName] = useState("");
   const [holderEmail, setHolderEmail] = useState("");
@@ -171,6 +198,21 @@ export default function HotelsView({
     setError(null);
   }, [trip]);
 
+  useEffect(() => {
+    let cancelled = false;
+    listCountries()
+      .then((result) => {
+        if (!cancelled && result.countries.length > 0)
+          setCountries(result.countries);
+      })
+      .catch(() => {
+        // Keep the static list: a country still has to be pickable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // The session answers the holder block; the traveller only adds a phone.
   useEffect(() => {
     setHolderFirstName((current) => current || traveller.firstName);
@@ -186,6 +228,9 @@ export default function HotelsView({
   ].filter((value): value is string => value !== null);
 
   const nights = nightsBetween(checkin, checkout);
+  const countryName =
+    countries.find((country) => country.code === countryCode)?.name ??
+    countryLabel(countryCode);
 
   /** Hotels are booked into a trip; open one from the search when there is none. */
   async function requireTrip(): Promise<string> {
@@ -204,8 +249,9 @@ export default function HotelsView({
 
   function validate(): boolean {
     const next: HotelErrors = {};
-    if (!city.trim()) next.city = "Where are you going?";
-    if (!countryCode) next.country = "Pick the country of the city.";
+    if (!countryCode) next.country = "Choose the country first.";
+    if (!city.trim()) next.city = "Choose a city.";
+    else if (!countryCode) next.city = "Choose the country first.";
     if (!checkin) next.checkin = "Choose a check-in date.";
     if (!checkout) next.checkout = "Choose a check-out date.";
     else if (nights <= 0) next.checkout = "Check-out must be after check-in.";
@@ -303,26 +349,36 @@ export default function HotelsView({
           Search stays
         </h2>
         <form className="search-bar stays" onSubmit={submit} noValidate>
-          <SearchField className="grow" error={errors.city} icon="⌖" label="Where">
-            <input
-              autoComplete="off"
-              list="hotel-city-options"
+          <SearchField error={errors.country} icon="⌂" label="Country">
+            <select
               onChange={(event) => {
-                const value = event.target.value;
-                setCity(value);
-                const auto = countryForCity(value);
-                if (auto) setCountryCode(auto);
+                setCountryCode(event.target.value);
+                setCity("");
               }}
-              placeholder="City or area"
-              value={city}
-            />
-            <datalist id="hotel-city-options">
-              {CITIES.map((item) => (
-                <option key={`${item.name}-${item.country}`} value={item.name}>
-                  {countryLabel(item.country)}
+              value={countryCode}
+            >
+              <option value="">Choose</option>
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
                 </option>
               ))}
-            </datalist>
+            </select>
+          </SearchField>
+          <SearchField
+            className="grow"
+            error={errors.city}
+            hint={countryCode ? undefined : "Pick a country first"}
+            icon="⌖"
+            label="City"
+          >
+            <CityPicker
+              country={countryCode}
+              countryName={countryName}
+              disabled={!countryCode}
+              onChange={setCity}
+              value={city}
+            />
           </SearchField>
           <SearchField
             error={errors.checkin ?? errors.checkout}
@@ -357,19 +413,6 @@ export default function HotelsView({
                 value={checkout}
               />
             </span>
-          </SearchField>
-          <SearchField error={errors.country} icon="⌂" label="Country">
-            <select
-              onChange={(event) => setCountryCode(event.target.value)}
-              value={countryCode}
-            >
-              <option value="">Choose</option>
-              {COUNTRIES.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.label}
-                </option>
-              ))}
-            </select>
           </SearchField>
           <SearchField icon="☺" label="Guests">
             <GuestStepper onChange={setAdults} value={adults} />
@@ -579,10 +622,11 @@ export default function HotelsView({
               <p>Try another date range, city, or country.</p>
             </div>
           ) : (
-            <div className="event-grid">
+            <div className="result-list">
               {result.hotels.map((entry) => (
-                <HotelCard
+                <HotelRow
                   hotel={entry}
+                  nights={nights}
                   key={entry.cheapest.offer_id}
                   selected={prebookedOfferId === entry.cheapest.offer_id}
                   busy={prebookingOffer !== null}

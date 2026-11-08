@@ -5,6 +5,7 @@ import { bookingQuoteRoutes } from "./booking-quote.js";
 import { invoiceRoutes } from "./invoices.js";
 import { liteApiRoutes } from "./liteapi.js";
 import { mobilityRoutes } from "./mobility.js";
+import { placeRoutes } from "./places.js";
 import { tripRoutes } from "./trips.js";
 
 /**
@@ -19,4 +20,5 @@ export const routeModules: RouteModule[] = [
   alertRoutes,
   invoiceRoutes,
   liteApiRoutes,
+  placeRoutes,
 ];

@@ -483,6 +483,44 @@ export interface HotelSearchRequest {
   limit?: number;
 }
 
+export interface LiteCountry {
+  code: string;
+  name: string;
+}
+
+/** `GET /data/countries`: the countries that have hotel inventory. */
+export function normalizeCountries(result: ProviderJson): LiteCountry[] {
+  const root = asRecord(result.json);
+  const countries: LiteCountry[] = [];
+  const seen = new Set<string>();
+  for (const entry of array(root?.data, "data")) {
+    const row = asRecord(entry);
+    const name = nonBlankString(row?.name);
+    const code = nonBlankString(row?.code)?.toUpperCase();
+    if (!name || !code || !isUpperCode(code, 2) || seen.has(code)) continue;
+    seen.add(code);
+    countries.push({ code, name });
+  }
+  countries.sort((left, right) => left.name.localeCompare(right.name));
+  return countries;
+}
+
+/** `GET /data/cities`: city names are the exact strings the rate search expects. */
+export function normalizeCities(result: ProviderJson): string[] {
+  const root = asRecord(result.json);
+  const cities: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of array(root?.data, "data")) {
+    const name = nonBlankString(asRecord(entry)?.city);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cities.push(name);
+  }
+  return cities;
+}
+
 /**
  * LiteAPI (Nuitee Connect) for flights and hotels. Each method makes exactly one
  * request. A missing key, a timeout, or any provider error is thrown as an
@@ -538,6 +576,30 @@ export class LiteApiClient {
       exposeClientErrors: true,
       retries: this.retriesFor(method, path),
     });
+  }
+
+  /** `GET /data/countries`: every country the provider sells hotels in. */
+  public async listCountries(): Promise<LiteCountry[]> {
+    const result = await this.request(
+      "GET",
+      "/data/countries",
+      "LiteAPI countries",
+    );
+    return normalizeCountries(result);
+  }
+
+  /** `GET /data/cities?countryCode=ID`: the cities with hotel inventory. */
+  public async listCities(countryCode: string): Promise<string[]> {
+    const code = countryCode.trim().toUpperCase();
+    if (!isUpperCode(code, 2)) {
+      throw queryInvalid("country_code must be a 2-letter code.");
+    }
+    const result = await this.request(
+      "GET",
+      `/data/cities?countryCode=${code}`,
+      "LiteAPI cities",
+    );
+    return normalizeCities(result);
   }
 
   /** `POST /flights/rates`: one-way search, cheapest offer per journey. */

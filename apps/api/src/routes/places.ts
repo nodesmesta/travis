@@ -1,0 +1,141 @@
+import { LiteApiClient } from "@travelflow/integrations";
+import { AppError } from "../errors.js";
+import { writeJson } from "../http.js";
+import { FixedWindowLimiter } from "../rate-limit.js";
+import { matchPath } from "../routing.js";
+import type { RequestContext, RouteModule } from "./context.js";
+
+const PLACES = "/api/v1/places";
+const limiter = new FixedWindowLimiter(120, 60_000);
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The provider publishes one country list and one city list per country. Both
+ * change rarely, so they are cached in process memory and the browser asks for
+ * a filtered slice instead of the whole list (Indonesia alone has 2,360 cities).
+ */
+interface CachedCountries {
+  at: number;
+  countries: Array<{ code: string; name: string }>;
+}
+
+const countryCache: { current: CachedCountries | null } = { current: null };
+const cityCache = new Map<string, { at: number; cities: string[] }>();
+
+function makeClient(context: RequestContext): LiteApiClient {
+  return new LiteApiClient({
+    apiKey: context.config.liteApiKey,
+    timeoutMs: context.config.liteApiTimeoutMs,
+  });
+}
+
+function take(context: RequestContext, userId: string, scope: string): void {
+  const wait = limiter.take(`${userId}:places:${scope}`);
+  if (wait <= 0) return;
+  context.response.setHeader("retry-after", String(wait));
+  throw new AppError(
+    "RATE_LIMITED",
+    "validation",
+    429,
+    "Too many place requests. Wait and try again.",
+    { retry_after_seconds: wait },
+  );
+}
+
+async function countries(context: RequestContext) {
+  const cached = countryCache.current;
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached;
+  const fresh = {
+    at: Date.now(),
+    countries: await makeClient(context).listCountries(),
+  };
+  countryCache.current = fresh;
+  return fresh;
+}
+
+async function cities(context: RequestContext, countryCode: string) {
+  const cached = cityCache.get(countryCode);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached;
+  const fresh = {
+    at: Date.now(),
+    cities: await makeClient(context).listCities(countryCode),
+  };
+  cityCache.set(countryCode, fresh);
+  return fresh;
+}
+
+/** Prefix matches first, then substring matches, so "jak" puts Jakarta on top. */
+function filterCities(
+  cities: string[],
+  query: string,
+  max: number,
+): { items: string[]; total: number } {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) {
+    return { items: cities.slice(0, max), total: cities.length };
+  }
+  const starts: string[] = [];
+  const contains: string[] = [];
+  for (const city of cities) {
+    const lowered = city.toLowerCase();
+    if (lowered.startsWith(needle)) starts.push(city);
+    else if (lowered.includes(needle)) contains.push(city);
+  }
+  const matches = starts.concat(contains);
+  return { items: matches.slice(0, max), total: matches.length };
+}
+
+function countryParam(context: RequestContext): string {
+  const value = (context.url.searchParams.get("country") ?? "")
+    .trim()
+    .toUpperCase();
+  if (value.length !== 2) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      "country must be a 2-letter code.",
+    );
+  }
+  return value;
+}
+
+export const placeRoutes: RouteModule = async (context) => {
+  const { method, url } = context;
+  const countriesPath = matchPath(url.pathname, `${PLACES}/countries`);
+  const citiesPath = matchPath(url.pathname, `${PLACES}/cities`);
+  if (!countriesPath && !citiesPath) return false;
+  if (method !== "GET") return false;
+
+  const session = await context.authenticate();
+
+  if (countriesPath) {
+    take(context, session.user.id, "countries");
+    const cached = await countries(context);
+    writeJson(context.response, 200, {
+      countries: cached.countries,
+      request_id: context.requestId,
+    });
+    return true;
+  }
+
+  take(context, session.user.id, "cities");
+  const code = countryParam(context);
+  const rawLimit = Number(url.searchParams.get("limit") ?? "50");
+  const max = Number.isInteger(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), 100)
+    : 50;
+  const cached = await cities(context, code);
+  const filtered = filterCities(
+    cached.cities,
+    url.searchParams.get("q") ?? "",
+    max,
+  );
+  writeJson(context.response, 200, {
+    country: code,
+    cities: filtered.items,
+    total: filtered.total,
+    request_id: context.requestId,
+  });
+  return true;
+};
