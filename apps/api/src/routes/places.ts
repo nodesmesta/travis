@@ -6,6 +6,7 @@ import type {
 } from "@travelflow/integrations";
 import { AppError } from "../errors.js";
 import { writeJson } from "../http.js";
+import { matchRoom } from "../services/room-matching.js";
 import { FixedWindowLimiter } from "../rate-limit.js";
 import { matchPath } from "../routing.js";
 import type { RequestContext, RouteModule } from "./context.js";
@@ -169,64 +170,6 @@ const rateCache = new Map<
 >();
 const RATE_TTL_MS = 10 * 60 * 1000;
 
-function roomWords(value: string): string[] {
-  const words: string[] = [];
-  let current = "";
-  for (const char of value.toLowerCase()) {
-    const isLetter = char >= "a" && char <= "z";
-    const isDigit = char >= "0" && char <= "9";
-    if (isLetter || isDigit) {
-      current += char;
-      continue;
-    }
-    if (current.length > 0) words.push(current);
-    current = "";
-  }
-  if (current.length > 0) words.push(current);
-  // "room" and single letters ("a") say nothing about which room it is.
-  return words.filter((word) => word.length > 1 && word !== "room");
-}
-
-/**
- * Jaccard over the words of both names. Dividing by the shorter name instead
- * would match any room containing a single generic word ("Standard Room" would
- * claim every standard room in the hotel).
- */
-function roomAffinity(
-  offerName: string,
-  contentName: string,
-): { score: number; shared: number } {
-  const left = new Set(roomWords(offerName));
-  const right = new Set(roomWords(contentName));
-  if (left.size === 0 || right.size === 0) return { score: 0, shared: 0 };
-  let shared = 0;
-  for (const word of left) if (right.has(word)) shared += 1;
-  const union = new Set([...left, ...right]).size;
-  return { score: shared / union, shared };
-}
-
-function contentRoomFor(
-  offerName: string,
-  rooms: HotelRoomContent[],
-): HotelRoomContent | null {
-  const needle = offerName.trim().toLowerCase();
-  for (const room of rooms) {
-    if (room.name.trim().toLowerCase() === needle) return room;
-  }
-  let best: HotelRoomContent | null = null;
-  let bestScore = 0;
-  for (const room of rooms) {
-    const { score, shared } = roomAffinity(offerName, room.name);
-    // One shared word is not a match: at least two, and half the union.
-    if (shared < 2) continue;
-    if (score > bestScore) {
-      best = room;
-      bestScore = score;
-    }
-  }
-  return bestScore >= 0.5 ? best : null;
-}
-
 function rateGroups(offers: HotelOffer[], rooms: HotelRoomContent[]) {
   const groups = new Map<
     string,
@@ -239,7 +182,7 @@ function rateGroups(offers: HotelOffer[], rooms: HotelRoomContent[]) {
     }
   >();
   for (const offer of offers) {
-    const room = contentRoomFor(offer.room_name, rooms);
+    const room = matchRoom(offer.room_name, rooms, offer.adults);
     const key = room?.room_id ?? `rate:${offer.room_name.toLowerCase()}`;
     let group = groups.get(key);
     if (!group) {
