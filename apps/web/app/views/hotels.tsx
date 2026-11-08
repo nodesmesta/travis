@@ -5,6 +5,7 @@ import { ApiClientError, simulatePayment } from "../../lib/api";
 import {
   prebookHotel,
   bookHotel,
+  cityBelongsToCountry,
   listCountries,
   searchHotels,
   type PlaceCountry,
@@ -259,6 +260,24 @@ export default function HotelsView({
     return Object.keys(next).length === 0;
   }
 
+  /**
+   * The provider only knows its own city names, so a city from another country
+   * would come back as an empty result list instead of an error.
+   */
+  async function cityMatchesCountry(): Promise<boolean> {
+    try {
+      if (await cityBelongsToCountry(countryCode, city)) return true;
+      setErrors((current) => ({
+        ...current,
+        city: `“${city.trim()}” is not a city in ${countryName}. Pick one from the list.`,
+      }));
+      return false;
+    } catch {
+      // The provider is the final judge; a failed lookup must not block search.
+      return true;
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!validate()) return;
@@ -268,6 +287,7 @@ export default function HotelsView({
     setBooked(null);
     setPrebookedOfferId(null);
     try {
+      if (!(await cityMatchesCountry())) return;
       const tripId = await requireTrip();
       setResult(
         await searchHotels(tripId, {

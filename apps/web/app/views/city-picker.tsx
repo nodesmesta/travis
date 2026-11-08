@@ -5,11 +5,20 @@ import { ApiClientError } from "../../lib/api";
 import { searchCities } from "../../lib/api-liteapi";
 
 /**
- * City combobox backed by the provider's own city list for the chosen country.
- * Indonesia alone has 2,360 cities, so the browser asks the API for a filtered
- * slice (prefix matches first) instead of loading the whole list.
+ * City combobox backed by the provider's own city list for the chosen country,
+ * so the name typed here is the exact string its rate search accepts. A country
+ * like Indonesia has thousands of cities, so short lists are shown whole and
+ * long ones are searched (prefix matches first) instead of dumping villages.
  */
-const suggestionCache = new Map<string, string[]>();
+const suggestionCache = new Map<string, { cities: string[]; total: number }>();
+
+/** Above this many cities the menu asks for a few letters before listing. */
+const LIST_ALL_BELOW = 40;
+
+export type CityLookup = (
+  country: string,
+  query: string,
+) => Promise<{ cities: string[]; total: number }>;
 
 export function CityPicker({
   country,
@@ -18,6 +27,7 @@ export function CityPicker({
   onChange,
   error,
   disabled = false,
+  lookup,
 }: {
   country: string;
   countryName: string;
@@ -25,9 +35,12 @@ export function CityPicker({
   onChange: (value: string) => void;
   error?: string | null | undefined;
   disabled?: boolean | undefined;
+  /** Tests and previews replace the network call; production uses the API. */
+  lookup?: CityLookup | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<string[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [active, setActive] = useState(-1);
@@ -37,6 +50,7 @@ export function CityPicker({
   // A new country means a new city list: drop what the last one returned.
   useEffect(() => {
     setOptions([]);
+    setTotal(0);
     setNote(null);
     setActive(-1);
     setOpen(false);
@@ -48,27 +62,45 @@ export function CityPicker({
     const key = `${country}:${query.toLowerCase()}`;
     const cached = suggestionCache.get(key);
     if (cached) {
-      setOptions(cached);
+      setOptions(cached.total > LIST_ALL_BELOW && !query ? [] : cached.cities);
+      setTotal(cached.total);
+      setNote(
+        cached.total > LIST_ALL_BELOW && !query
+          ? `${cached.total.toLocaleString("en-US")} cities in ${countryName} — type a few letters.`
+          : null,
+      );
       return;
     }
+    const load: CityLookup =
+      lookup ??
+      ((code: string, text: string) =>
+        searchCities(code, text).then((result) => ({
+          cities: result.cities,
+          total: result.total,
+        })));
     let cancelled = false;
     setLoading(true);
     const timer = setTimeout(
       () => {
-        searchCities(country, query)
+        load(country, query)
           .then((result) => {
             if (cancelled) return;
-            suggestionCache.set(key, result.cities);
-            setOptions(result.cities);
+            suggestionCache.set(key, result);
+            setTotal(result.total);
+            const hidden = result.total > LIST_ALL_BELOW && query.length === 0;
+            setOptions(hidden ? [] : result.cities);
             setNote(
-              result.total === 0
-                ? `No city in ${countryName} matches “${query}”.`
-                : null,
+              hidden
+                ? `${result.total.toLocaleString("en-US")} cities in ${countryName} — type a few letters.`
+                : result.total === 0
+                  ? `No city in ${countryName} matches “${query}”.`
+                  : null,
             );
           })
           .catch((caught: unknown) => {
             if (cancelled) return;
             setOptions([]);
+            setTotal(0);
             setNote(
               caught instanceof ApiClientError
                 ? caught.message
@@ -86,7 +118,7 @@ export function CityPicker({
       clearTimeout(timer);
       if (blurTimer.current) clearTimeout(blurTimer.current);
     };
-  }, [open, country, countryName, value, disabled]);
+  }, [open, country, countryName, value, disabled, lookup]);
 
   function choose(city: string) {
     onChange(city);
@@ -129,6 +161,9 @@ export function CityPicker({
           onChange(event.target.value);
           setOpen(true);
         }}
+        // Clicking an already focused input must reopen the list after a country
+        // change closed it, so opening is bound to click as well as focus.
+        onClick={() => setOpen(true)}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         onBlur={() => {
@@ -140,6 +175,7 @@ export function CityPicker({
       />
       {open && country ? (
         <div className="city-menu" id={listId} role="listbox">
+          <p className="city-menu-head">Cities in {countryName}</p>
           {loading ? <p className="city-note">Searching…</p> : null}
           {!loading && note ? <p className="city-note">{note}</p> : null}
           {!loading && !note && options.length === 0 ? (
@@ -162,6 +198,12 @@ export function CityPicker({
               {city}
             </button>
           ))}
+          {!loading && total > options.length && options.length > 0 ? (
+            <p className="city-note">
+              Showing {options.length} of {total.toLocaleString("en-US")} — keep
+              typing to narrow it down.
+            </p>
+          ) : null}
         </div>
       ) : null}
       {error ? <span className="field-error">{error}</span> : null}
