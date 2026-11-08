@@ -183,7 +183,13 @@ function rateGroups(offers: HotelOffer[], rooms: HotelRoomContent[]) {
   >();
   for (const offer of offers) {
     const room = matchRoom(offer.room_name, rooms, offer.adults);
-    const key = room?.room_id ?? `rate:${offer.room_name.toLowerCase()}`;
+    // Provider room ids are often empty, so the name has to carry the key —
+    // otherwise every matched room collapses into one card.
+    const key = room
+      ? room.room_id.length > 0
+        ? room.room_id
+        : `room:${room.name.trim().toLowerCase()}`
+      : `rate:${offer.room_name.toLowerCase()}`;
     let group = groups.get(key);
     if (!group) {
       group = {
