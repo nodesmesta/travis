@@ -187,8 +187,19 @@ export interface RouteRequestResult {
   traffic: TrafficSnapshotView | null;
 }
 
+export interface WeatherPlace {
+  context_point_id: string;
+  label: string;
+  type: string;
+  latitude: number | null;
+  longitude: number | null;
+  has_snapshot: boolean;
+}
+
 export interface WeatherList {
   request_id: string;
+  /** Every place of the trip, so a place without a forecast still shows up. */
+  places: WeatherPlace[];
   items: WeatherSnapshotView[];
   missing_context_point_ids: string[];
 }
