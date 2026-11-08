@@ -56,7 +56,6 @@ export interface ExploreViewProps {
 
 export type ViewId =
   | "explore"
-  | "mobility"
   | "assistant"
   | "itinerary"
   | "bookings"
@@ -72,7 +71,6 @@ export const VIEWS: Array<{ id: ViewId; label: string; hint: string }> = [
   },
   { id: "bookings", label: "Bookings", hint: "Your reservations" },
   { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
-  { id: "mobility", label: "Mobility", hint: "Routes, weather, traffic" },
   { id: "assistant", label: "Assistant", hint: "Ask about your trip" },
   { id: "alerts", label: "Alerts", hint: "What changed" },
   { id: "invoices", label: "Invoices", hint: "Receipts and email" },

@@ -68,6 +68,11 @@ function scheduleInstant(value: string, timezone: string): string {
   return zonedInstant(date, time, timezone);
 }
 
+/** `value` moved by `minutes`, as an ISO instant. */
+function addMinutes(value: string, minutes: number): string {
+  return new Date(Date.parse(value) + minutes * 60_000).toISOString();
+}
+
 function earlier(current: string | null, candidate: string): string {
   if (!current) return candidate;
   return Date.parse(candidate) < Date.parse(current) ? candidate : current;
@@ -151,6 +156,7 @@ export class TripBookingLinkService {
         ...(lookup.error === null ? {} : { context_error: lookup.error }),
       },
     });
+    await this.transferLegs(input.tripId);
     return { contextPointId: point?.id ?? null };
   }
 
@@ -167,6 +173,19 @@ export class TripBookingLinkService {
     const first = segments[0];
     const last = segments[segments.length - 1];
     if (!first || !last) return { contextPointId: null };
+    const confirmation =
+      input.providerBooking.state === "confirmed" ? "confirmed" : "unconfirmed";
+    // Both ends of the flight are places of the trip: the airport it leaves from and
+    // the one it lands at. Without them there is no way to say how to get anywhere.
+    const originLookup = await this.lookUp(() =>
+      this.requirePlaces().airport(first.origin_code),
+    );
+    const originPoint = await this.placeFor(
+      input.tripId,
+      trip.timezone,
+      originLookup,
+      confirmation,
+    );
     // The destination is where the traveller actually spends the trip.
     const lookup = await this.lookUp(() =>
       this.requirePlaces().airport(last.destination_code),
@@ -175,15 +194,17 @@ export class TripBookingLinkService {
       input.tripId,
       trip.timezone,
       lookup,
-      input.providerBooking.state === "confirmed" ? "confirmed" : "unconfirmed",
+      confirmation,
     );
+    const start = scheduleInstant(first.departs_at, trip.timezone);
+    const end = scheduleInstant(last.arrives_at, trip.timezone);
     await this.upsertItem({
       tripId: input.tripId,
       timezone: trip.timezone,
       type: "flight",
       title: `${first.origin_code} → ${last.destination_code} · ${first.carrier_name} ${first.flight_number}`,
-      start: scheduleInstant(first.departs_at, trip.timezone),
-      end: scheduleInstant(last.arrives_at, trip.timezone),
+      start,
+      end,
       status: input.providerBooking.state === "confirmed" ? "confirmed" : "planned",
       bookingId: input.booking.id,
       providerBookingId: input.providerBooking.id,
@@ -203,11 +224,97 @@ export class TripBookingLinkService {
           carrier: segment.carrier_name,
           flight_number: segment.flight_number,
         })),
+        airport_codes: {
+          origin: first.origin_code,
+          destination: last.destination_code,
+        },
         times_are_airport_local: true,
         ...(lookup.error === null ? {} : { context_error: lookup.error }),
+        ...(originLookup.error === null
+          ? {}
+          : { origin_context_error: originLookup.error }),
       },
     });
+    await this.transferLegs(input.tripId);
     return { contextPointId: point?.id ?? null };
+  }
+
+  /**
+   * The travel a trip implies but nobody booked: getting from the airport to the
+   * hotel after landing, and back to the airport before the flight home. They are
+   * planned only from places the trip really has, so a trip without a flight or
+   * without a hotel gets no invented leg.
+   */
+  private async transferLegs(tripId: string): Promise<void> {
+    const [points, agenda, legs] = await Promise.all([
+      this.repository.listContextPoints(tripId),
+      this.repository.listAgenda(tripId),
+      this.repository.listJourneyLegs(tripId),
+    ]);
+    const hotel = points.find((point) => point.type === "hotel") ?? null;
+    const flight =
+      agenda.find(
+        (item) => item.type === "flight" && item.status !== "cancelled",
+      ) ?? null;
+    if (!hotel || !flight) return;
+    const codes = (flight.metadata as { airport_codes?: unknown } | null)
+      ?.airport_codes as { origin?: string; destination?: string } | undefined;
+    const airportOf = (code: string | undefined) =>
+      code === undefined
+        ? null
+        : (points.find(
+            (point) => point.type === "airport" && point.external_place_id === code,
+          ) ?? null);
+    const arrivalAirport = airportOf(codes?.destination);
+    const departureAirport = airportOf(codes?.origin);
+    const plan: Array<{
+      originId: string;
+      destinationId: string;
+      departureAt: string;
+      agendaId: string;
+    }> = [];
+    if (arrivalAirport) {
+      plan.push({
+        originId: arrivalAirport.id,
+        destinationId: hotel.id,
+        // Land, collect the bag, then head for the hotel.
+        departureAt: addMinutes(flight.end_at, 60),
+        agendaId: flight.id,
+      });
+    }
+    if (departureAirport) {
+      plan.push({
+        originId: hotel.id,
+        destinationId: departureAirport.id,
+        // Leave three hours before the flight, so the leg is judged against it.
+        departureAt: addMinutes(flight.start_at, -180),
+        agendaId: flight.id,
+      });
+    }
+    for (const item of plan) {
+      const existing = legs.find(
+        (leg) =>
+          leg.origin_context_point_id === item.originId &&
+          leg.destination_context_point_id === item.destinationId,
+      );
+      if (existing) {
+        if (existing.status === "cancelled") continue;
+        if (Date.parse(existing.departure_at) === Date.parse(item.departureAt)) continue;
+        await this.repository.updateJourneyLeg(existing.id, tripId, {
+          departure_at: item.departureAt,
+          related_agenda_id: item.agendaId,
+        });
+        continue;
+      }
+      await this.repository.createJourneyLeg({
+        trip_id: tripId,
+        origin_context_point_id: item.originId,
+        destination_context_point_id: item.destinationId,
+        related_agenda_id: item.agendaId,
+        departure_at: item.departureAt,
+        status: "planned",
+      });
+    }
   }
 
   /** Cancelling the ticket takes the item off the itinerary. */
@@ -220,10 +327,20 @@ export class TripBookingLinkService {
       input.providerBookingId,
     );
     if (!item) return;
-    if (item.status === "cancelled") return;
-    await this.repository.updateAgendaItem(item.id, input.tripId, {
-      status: "cancelled",
-    });
+    if (item.status !== "cancelled") {
+      await this.repository.updateAgendaItem(item.id, input.tripId, {
+        status: "cancelled",
+      });
+    }
+    // A cancelled flight leaves no travel to plan.
+    const legs = await this.repository.listJourneyLegs(input.tripId);
+    for (const leg of legs) {
+      if (leg.related_agenda_id !== item.id) continue;
+      if (leg.status === "cancelled") continue;
+      await this.repository.updateJourneyLeg(leg.id, input.tripId, {
+        status: "cancelled",
+      });
+    }
   }
 
   private requirePlaces(): BookingPlaceResolver {

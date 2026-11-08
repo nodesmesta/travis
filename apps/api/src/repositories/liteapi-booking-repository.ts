@@ -6,6 +6,7 @@ import type {
   Booking,
   ContextPoint,
   Database,
+  JourneyLeg,
   Payment,
   ProviderBooking,
   ProviderBookingInsert,
@@ -294,6 +295,63 @@ export class LiteApiBookingRepository {
       .select("*")
       .single();
     if (error || !data) throw persistenceFailure("context_points.update_for_booking");
+    return data;
+  }
+
+  public async listContextPoints(tripId: string): Promise<ContextPoint[]> {
+    const { data, error } = await this.client
+      .from("context_points")
+      .select("*")
+      .eq("trip_id", tripId)
+      .eq("status", "active");
+    if (error) throw persistenceFailure("context_points.list_for_booking");
+    return data ?? [];
+  }
+
+  public async listJourneyLegs(tripId: string): Promise<JourneyLeg[]> {
+    const { data, error } = await this.client
+      .from("journey_legs")
+      .select("*")
+      .eq("trip_id", tripId);
+    if (error) throw persistenceFailure("journey_legs.list_for_booking");
+    return data ?? [];
+  }
+
+  public async listAgenda(tripId: string): Promise<AgendaItem[]> {
+    const { data, error } = await this.client
+      .from("agenda_items")
+      .select("*")
+      .eq("trip_id", tripId)
+      .order("start_at", { ascending: true });
+    if (error) throw persistenceFailure("agenda_items.list_for_booking");
+    return data ?? [];
+  }
+
+  public async createJourneyLeg(
+    input: Database["public"]["Tables"]["journey_legs"]["Insert"],
+  ): Promise<JourneyLeg> {
+    const { data, error } = await this.client
+      .from("journey_legs")
+      .insert(input)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("journey_legs.create_for_booking");
+    return data;
+  }
+
+  public async updateJourneyLeg(
+    id: string,
+    tripId: string,
+    patch: Database["public"]["Tables"]["journey_legs"]["Update"],
+  ): Promise<JourneyLeg> {
+    const { data, error } = await this.client
+      .from("journey_legs")
+      .update(patch)
+      .eq("id", id)
+      .eq("trip_id", tripId)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("journey_legs.update_for_booking");
     return data;
   }
 
