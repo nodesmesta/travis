@@ -18,6 +18,9 @@ export function getSupabaseBrowserClient(): SupabaseClient {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
+      // PKCE keeps tokens out of the URL: the redirect carries a one-time code that the
+      // client exchanges using a verifier that never leaves this browser.
+      flowType: "pkce",
     },
   });
   return browserClient;

@@ -170,6 +170,32 @@ input:focus {
 .button.wide {
   width: 100%;
 }
+.button.google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+  background: white;
+  color: var(--text);
+  border: 1px solid var(--border);
+  min-height: 48px;
+}
+.button.google:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.google-mark {
+  flex: none;
+}
+.dev-sign-in {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px dashed var(--border);
+}
+.dev-sign-in .fine-print {
+  margin: 0;
+}
 .button-row {
   display: flex;
   flex-wrap: wrap;
