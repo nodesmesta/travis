@@ -64,15 +64,33 @@ async function cities(context: RequestContext, countryCode: string) {
   return fresh;
 }
 
-/** Prefix matches first, then substring matches, so "jak" puts Jakarta on top. */
+/**
+ * Prefix matches first, then substring matches, so "jak" puts Jakarta on top.
+ * `first` names the cities the traveller looks for; without a query they lead the
+ * list, because the provider answers alphabetically and its first page is villages.
+ */
 function filterCities(
   cities: string[],
   query: string,
   max: number,
+  first: string[],
 ): { items: string[]; total: number } {
   const needle = query.trim().toLowerCase();
   if (needle.length === 0) {
-    return { items: cities.slice(0, max), total: cities.length };
+    const byName = new Map(cities.map((city) => [city.toLowerCase(), city]));
+    const lead: string[] = [];
+    const seen = new Set<string>();
+    for (const name of first) {
+      const match = byName.get(name.toLowerCase());
+      if (!match || seen.has(match)) continue;
+      seen.add(match);
+      lead.push(match);
+    }
+    const rest = cities.filter((city) => !seen.has(city));
+    return {
+      items: lead.concat(rest).slice(0, max),
+      total: cities.length,
+    };
   }
   const starts: string[] = [];
   const contains: string[] = [];
@@ -83,6 +101,16 @@ function filterCities(
   }
   const matches = starts.concat(contains);
   return { items: matches.slice(0, max), total: matches.length };
+}
+
+/** `first=Jakarta,Bandung,Surabaya`: at most 20 names, each trimmed. */
+function firstNameParam(context: RequestContext): string[] {
+  const raw = context.url.searchParams.get("first") ?? "";
+  return raw
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0 && name.length <= 80)
+    .slice(0, 20);
 }
 
 function countryParam(context: RequestContext): string {
@@ -123,11 +151,11 @@ export const placeRoutes: RouteModule = async (context) => {
   const code = countryParam(context);
   const rawLimit = Number(url.searchParams.get("limit") ?? "50");
   const max = Number.isInteger(rawLimit)
-    ? Math.min(Math.max(rawLimit, 1), 100)
+    ? Math.min(Math.max(rawLimit, 1), 500)
     : 50;
   const cached = await cities(context, code);
   const query = url.searchParams.get("q") ?? "";
-  const filtered = filterCities(cached.cities, query, max);
+  const filtered = filterCities(cached.cities, query, max, firstNameParam(context));
   const needle = query.trim().toLowerCase();
   // The form uses this to reject a city that belongs to another country, which
   // the rate search would otherwise answer with an empty result.

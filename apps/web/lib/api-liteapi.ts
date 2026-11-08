@@ -273,10 +273,12 @@ export function searchCities(
   country: string,
   query: string,
   limit = 40,
+  first: string[] = [],
 ): Promise<{ country: string; cities: string[]; total: number }> {
   const params = new URLSearchParams({ country, limit: String(limit) });
   const trimmed = query.trim();
   if (trimmed) params.set("q", trimmed);
+  if (first.length > 0) params.set("first", first.slice(0, 20).join(","));
   return request(`/places/cities?${params.toString()}`);
 }
 
