@@ -28,6 +28,22 @@ export interface ProviderCall {
    * no secret (for example "the airline requires a travel document").
    */
   exposeClientErrors?: boolean;
+  /**
+   * Extra attempts for a call that is safe to repeat. Leave it unset for
+   * anything that creates or cancels a reservation.
+   */
+  retries?: number;
+}
+
+/** Backoff between attempts: 400ms, 800ms, plus jitter, capped for a 429. */
+function retryDelayMs(attempt: number, error: unknown): number {
+  if (
+    error instanceof ExternalDataError &&
+    typeof error.details?.retry_after_seconds === "number"
+  ) {
+    return Math.min(error.details.retry_after_seconds, 2) * 1000;
+  }
+  return 400 * 2 ** (attempt - 1) + Math.floor(Math.random() * 150);
 }
 
 export interface ProviderJson {
@@ -97,6 +113,22 @@ function clientErrorOf(
 export async function callProviderJson(
   call: ProviderCall,
 ): Promise<ProviderJson> {
+  const attempts = Math.max(0, call.retries ?? 0) + 1;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await callProviderOnce(call);
+    } catch (error) {
+      const retryable =
+        error instanceof ExternalDataError && error.retryable === true;
+      if (!retryable || attempt >= attempts) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelayMs(attempt, error)),
+      );
+    }
+  }
+}
+
+async function callProviderOnce(call: ProviderCall): Promise<ProviderJson> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), call.timeoutMs);
   const audit = auditUrl(call.url, call.keyParam);
@@ -128,9 +160,13 @@ export async function callProviderJson(
     throw new ExternalDataError(
       "EXTERNAL_PROVIDER_ERROR",
       call.provider,
-      `${call.label} request failed.`,
+      `${call.label} could not reach the provider.`,
       502,
       true,
+      {
+        reason: "network",
+        cause: error instanceof Error ? error.name : "unknown",
+      },
     );
   }
 

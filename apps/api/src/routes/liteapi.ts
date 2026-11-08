@@ -96,6 +96,49 @@ function positiveInteger(
   return value;
 }
 
+// The nested parsers below read one key from an object that is already the
+// parent (a holder, a guest, a passenger, or a document), so the camel-free
+// dotted name is only the label used in the error message.
+function nestedString(
+  body: Record<string, unknown>,
+  key: string,
+  label: string,
+): string {
+  const value = body[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      `${label} must be a non-blank string.`,
+    );
+  }
+  return value.trim();
+}
+
+function nestedInteger(
+  body: Record<string, unknown>,
+  key: string,
+  label: string,
+  maximum?: number,
+): number {
+  const value = body[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    (maximum !== undefined && value > maximum)
+  ) {
+    throw new AppError(
+      "REQUEST_INVALID",
+      "validation",
+      400,
+      `${label} must be a positive integer.`,
+    );
+  }
+  return value;
+}
+
 function only(
   body: Record<string, unknown>,
   allowed: string[],
@@ -113,9 +156,9 @@ function only(
 
 function person(body: Record<string, unknown>, label: string): Person {
   return {
-    first_name: requiredString(body, `${label}.first_name`),
-    last_name: requiredString(body, `${label}.last_name`),
-    email: requiredString(body, `${label}.email`),
+    first_name: nestedString(body, "first_name", `${label}.first_name`),
+    last_name: nestedString(body, "last_name", `${label}.last_name`),
+    email: nestedString(body, "email", `${label}.email`),
   };
 }
 
@@ -195,7 +238,7 @@ function parseHotelBook(body: unknown): {
   const holderBody = input.holder as Record<string, unknown>;
   const holder = {
     ...person(holderBody, "holder"),
-    phone: requiredString(holderBody, "holder.phone"),
+    phone: nestedString(holderBody, "phone", "holder.phone"),
   };
   if (
     !Array.isArray(input.guests) ||
@@ -220,8 +263,9 @@ function parseHotelBook(body: unknown): {
     const guest = value as Record<string, unknown>;
     return {
       ...person(guest, `guests[${index}]`),
-      occupancy_number: positiveInteger(
+      occupancy_number: nestedInteger(
         guest,
+        "occupancy_number",
         `guests[${index}].occupancy_number`,
       ),
     };
@@ -263,11 +307,16 @@ function parseFlightPrebook(body: unknown): {
   const contactBody = input.contact as Record<string, unknown>;
   const contact = {
     ...person(contactBody, "contact"),
-    phone_country_code: requiredString(
+    phone_country_code: nestedString(
       contactBody,
+      "phone_country_code",
       "contact.phone_country_code",
     ),
-    phone_number: requiredString(contactBody, "contact.phone_number"),
+    phone_number: nestedString(
+      contactBody,
+      "phone_number",
+      "contact.phone_number",
+    ),
   };
   if (
     !Array.isArray(input.passengers) ||
@@ -289,9 +338,9 @@ function parseFlightPrebook(body: unknown): {
         `passengers[${index}] must be an object.`,
       );
     const p = value as Record<string, unknown>;
-    const type = requiredString(p, `passengers[${index}].type`);
-    const title = requiredString(p, `passengers[${index}].title`);
-    const gender = requiredString(p, `passengers[${index}].gender`);
+    const type = nestedString(p, "type", `passengers[${index}].type`);
+    const title = nestedString(p, "title", `passengers[${index}].title`);
+    const gender = nestedString(p, "gender", `passengers[${index}].gender`);
     if (
       !["adult", "child", "infant"].includes(type) ||
       !["MR", "MS", "MRS", "MISS"].includes(title) ||
@@ -306,11 +355,19 @@ function parseFlightPrebook(body: unknown): {
     const result: FlightPassenger = {
       type: type as FlightPassenger["type"],
       title: title as FlightPassenger["title"],
-      first_name: requiredString(p, `passengers[${index}].first_name`),
-      last_name: requiredString(p, `passengers[${index}].last_name`),
-      birthday: requiredString(p, `passengers[${index}].birthday`),
+      first_name: nestedString(
+        p,
+        "first_name",
+        `passengers[${index}].first_name`,
+      ),
+      last_name: nestedString(p, "last_name", `passengers[${index}].last_name`),
+      birthday: nestedString(p, "birthday", `passengers[${index}].birthday`),
       gender: gender as FlightPassenger["gender"],
-      nationality: requiredString(p, `passengers[${index}].nationality`),
+      nationality: nestedString(
+        p,
+        "nationality",
+        `passengers[${index}].nationality`,
+      ),
     };
     if (p.document !== undefined) {
       if (
@@ -325,8 +382,9 @@ function parseFlightPrebook(body: unknown): {
           `passengers[${index}].document must be an object.`,
         );
       const document = p.document as Record<string, unknown>;
-      const documentType = requiredString(
+      const documentType = nestedString(
         document,
+        "type",
         `passengers[${index}].document.type`,
       );
       if (documentType !== "passport" && documentType !== "id_card")
@@ -338,16 +396,19 @@ function parseFlightPrebook(body: unknown): {
         );
       result.document = {
         type: documentType,
-        number: requiredString(
+        number: nestedString(
           document,
+          "number",
           `passengers[${index}].document.number`,
         ),
-        issue_country: requiredString(
+        issue_country: nestedString(
           document,
+          "issue_country",
           `passengers[${index}].document.issue_country`,
         ),
-        expiry: requiredString(
+        expiry: nestedString(
           document,
+          "expiry",
           `passengers[${index}].document.expiry`,
         ),
       };

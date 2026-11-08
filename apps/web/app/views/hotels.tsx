@@ -9,7 +9,15 @@ import {
   type HotelOffer,
   type HotelPrebookAttempt,
   type HotelSearchResponse,
+  type ProviderActionResponse,
 } from "../../lib/api-liteapi";
+import {
+  ProviderBookingActions,
+  ProviderBookingStatus,
+  cancellableState,
+  providerStateLabel,
+  providerStateTone,
+} from "./provider-booking-parts";
 import type { ViewProps } from "./types";
 
 function datePart(value: string | null): string {
@@ -81,7 +89,11 @@ function HotelCard({
   );
 }
 
-export default function HotelsView({ trip }: ViewProps) {
+export default function HotelsView({
+  trip,
+  onOpenInvoices,
+  onOpenBookings,
+}: ViewProps) {
   const [city, setCity] = useState(trip.destination_summary ?? "");
   const [countryCode, setCountryCode] = useState("");
   const [checkin, setCheckin] = useState(datePart(trip.start_at));
@@ -95,7 +107,7 @@ export default function HotelsView({ trip }: ViewProps) {
   const [holderPhone, setHolderPhone] = useState("");
   const [result, setResult] = useState<HotelSearchResponse | null>(null);
   const [prebook, setPrebook] = useState<HotelPrebookAttempt | null>(null);
-  const [booked, setBooked] = useState(false);
+  const [booked, setBooked] = useState<ProviderActionResponse | null>(null);
   const [prebookedOfferId, setPrebookedOfferId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [prebookingOffer, setPrebookingOffer] = useState<string | null>(null);
@@ -109,7 +121,7 @@ export default function HotelsView({ trip }: ViewProps) {
     setCurrency("");
     setResult(null);
     setPrebook(null);
-    setBooked(false);
+    setBooked(null);
     setPrebookedOfferId(null);
     setError(null);
   }, [trip]);
@@ -119,7 +131,7 @@ export default function HotelsView({ trip }: ViewProps) {
     setBusy(true);
     setError(null);
     setPrebook(null);
-    setBooked(false);
+    setBooked(null);
     setPrebookedOfferId(null);
     try {
       setResult(
@@ -147,7 +159,7 @@ export default function HotelsView({ trip }: ViewProps) {
     try {
       setPrebook(await prebookHotel(trip.id, offer.offer_id));
       setPrebookedOfferId(offer.offer_id);
-      setBooked(false);
+      setBooked(null);
     } catch (caught) {
       setError(errorText(caught));
     } finally {
@@ -161,23 +173,27 @@ export default function HotelsView({ trip }: ViewProps) {
     setError(null);
     try {
       await simulatePayment(trip.id, prebook.booking.id, "succeeded");
-      await bookHotel(trip.id, prebook.provider_booking.id, {
-        holder: {
-          first_name: holderFirstName,
-          last_name: holderLastName,
-          email: holderEmail,
-          phone: holderPhone,
-        },
-        guests: [
-          {
-            occupancy_number: 1,
+      const bookingResult = await bookHotel(
+        trip.id,
+        prebook.provider_booking.id,
+        {
+          holder: {
             first_name: holderFirstName,
             last_name: holderLastName,
             email: holderEmail,
+            phone: holderPhone,
           },
-        ],
-      });
-      setBooked(true);
+          guests: [
+            {
+              occupancy_number: 1,
+              first_name: holderFirstName,
+              last_name: holderLastName,
+              email: holderEmail,
+            },
+          ],
+        },
+      );
+      setBooked(bookingResult);
     } catch (caught) {
       setError(errorText(caught));
     } finally {
@@ -187,17 +203,6 @@ export default function HotelsView({ trip }: ViewProps) {
 
   return (
     <div className="view-stack">
-      <div className="welcome-row">
-        <div>
-          <p className="eyebrow">LITEAPI HOTEL SEARCH</p>
-          <h1>Find a stay that fits the trip.</h1>
-          <p className="lede">
-            Rates come from LiteAPI. Search results are live snapshots and a
-            prebook reserves the provider rate in the sandbox only.
-          </p>
-        </div>
-        <span className="sun-badge">⌂</span>
-      </div>
       {error ? <div className="status-banner error">{error}</div> : null}
       <section
         className="panel discovery-panel"
@@ -295,7 +300,11 @@ export default function HotelsView({ trip }: ViewProps) {
           <div className="section-heading">
             <div>
               <p className="eyebrow">AVAILABLE RATES</p>
-              <h2>{result.hotels.length} hotels found</h2>
+              <h2>
+                {result.total_found && result.total_found > result.hotels.length
+                  ? `${result.hotels.length} of ${result.total_found} hotels`
+                  : `${result.hotels.length} hotels found`}
+              </h2>
             </div>
             <span className="fresh-label">
               {result.sandbox ? "sandbox" : "live"} · Retrieved{" "}
@@ -304,17 +313,12 @@ export default function HotelsView({ trip }: ViewProps) {
           </div>
           {prebook ? (
             <div className="status-banner success">
-              <strong>
-                {booked ? "Sandbox booking confirmed." : "Rate prebooked."}
-              </strong>{" "}
-              {money(prebook.prebook.total)} through {prebook.prebook.checkin}{" "}
-              to {prebook.prebook.checkout}.
-              {!booked
-                ? " Complete the guest details and sandbox payment to book it."
-                : " Invoice generation has been queued."}
+              <strong>Rate prebooked.</strong> {money(prebook.prebook.total)}{" "}
+              through {prebook.prebook.checkin} to {prebook.prebook.checkout}.
+              Complete the guest details and sandbox payment to book it.
             </div>
           ) : null}
-          {prebook && !booked ? (
+          {prebook && booked === null ? (
             <div className="panel payment-choice">
               <p className="eyebrow">GUEST DETAILS</p>
               <div className="discovery-form">
@@ -356,6 +360,53 @@ export default function HotelsView({ trip }: ViewProps) {
               >
                 {busy ? "Paying and booking…" : "Pay sandbox payment and book"}
               </button>
+            </div>
+          ) : null}
+          {booked ? (
+            <div className="provider-result">
+              <div className="provider-result-head">
+                <div>
+                  <p className="eyebrow">PROVIDER RESULT</p>
+                  <span className="provider-label">Confirmation code</span>
+                  <strong className="provider-code">
+                    {booked.provider_booking.confirmation_code ??
+                      booked.booking.confirmation_code ??
+                      "Not issued yet"}
+                  </strong>
+                </div>
+                <span
+                  className={`booking-status ${providerStateTone(booked.provider_booking.state)}`}
+                >
+                  {providerStateLabel(booked.provider_booking.state)}
+                </span>
+              </div>
+              <ProviderBookingStatus
+                provider={booked.provider_booking}
+                bookingType="hotel"
+              />
+              <ProviderBookingActions
+                tripId={trip.id}
+                bookingType="hotel"
+                providerBookingId={booked.provider_booking.id}
+                canCancel={cancellableState(booked.provider_booking.state)}
+                onUpdated={setBooked}
+              />
+              <div className="provider-action-row">
+                <button
+                  className="button ghost"
+                  onClick={onOpenBookings}
+                  type="button"
+                >
+                  All reservations
+                </button>
+                <button
+                  className="button ghost"
+                  onClick={onOpenInvoices}
+                  type="button"
+                >
+                  Invoices
+                </button>
+              </div>
             </div>
           ) : null}
           {result.hotels.length === 0 ? (

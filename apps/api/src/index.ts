@@ -80,6 +80,7 @@ import type {
   ContextPoint,
   JourneyLeg,
   Payment,
+  ProviderBooking,
   Trip,
 } from "./supabase/database.types.js";
 
@@ -147,6 +148,29 @@ function serializedBooking(booking: Booking): Record<string, unknown> {
     ...(booking.cancelled_at ? { cancelled_at: booking.cancelled_at } : {}),
     created_at: booking.created_at,
     updated_at: booking.updated_at,
+  };
+}
+
+function serializedProviderBooking(
+  providerBooking: ProviderBooking,
+): Record<string, unknown> {
+  return {
+    id: providerBooking.id,
+    booking_id: providerBooking.booking_id,
+    booking_type: providerBooking.booking_type,
+    provider: providerBooking.provider,
+    state: providerBooking.state,
+    provider_status: providerBooking.provider_status,
+    provider_booking_id: providerBooking.provider_booking_id,
+    client_reference: providerBooking.client_reference,
+    confirmation_code: providerBooking.confirmation_code,
+    currency: providerBooking.currency,
+    cancellation_fee: providerBooking.cancellation_fee,
+    refund_amount: providerBooking.refund_amount,
+    checkin: providerBooking.checkin,
+    checkout: providerBooking.checkout,
+    ticket_deadline: providerBooking.ticket_deadline,
+    last_reconciled_at: providerBooking.last_reconciled_at,
   };
 }
 
@@ -1141,7 +1165,7 @@ async function handleRequest(
 
   const bookingsTripId = bookingsTripIdFromPath(url.pathname);
   if (bookingsTripId && method === "GET") {
-    const { user, repository, bookingRepository } =
+    const { client, user, repository, bookingRepository } =
       await authenticatedRepository(request);
     const trip = await repository.getTripRowForUser(bookingsTripId, user.id);
     if (!trip)
@@ -1152,8 +1176,22 @@ async function handleRequest(
         "Trip was not found.",
       );
     const bookings = await bookingRepository.listBookings(bookingsTripId);
+    const providerBookings = await new LiteApiBookingRepository(
+      client,
+    ).listProviderBookings(bookingsTripId);
+    const providerByBooking = new Map(
+      providerBookings.map((item) => [item.booking_id, item]),
+    );
     writeJson(response, 200, {
-      items: bookings.map(serializedBooking),
+      items: bookings.map((booking) => {
+        const providerBooking = providerByBooking.get(booking.id);
+        return providerBooking
+          ? {
+              ...serializedBooking(booking),
+              provider_booking: serializedProviderBooking(providerBooking),
+            }
+          : serializedBooking(booking);
+      }),
       request_id: requestId,
     });
     return;

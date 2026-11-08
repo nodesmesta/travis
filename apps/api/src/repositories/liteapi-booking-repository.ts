@@ -112,6 +112,17 @@ export class LiteApiBookingRepository {
     return data;
   }
 
+  public async listProviderBookings(
+    tripId: string,
+  ): Promise<ProviderBooking[]> {
+    const { data, error } = await this.client
+      .from("provider_bookings")
+      .select("*")
+      .eq("trip_id", tripId);
+    if (error) throw persistenceFailure("provider_bookings.list");
+    return data ?? [];
+  }
+
   public async getProviderBookingByBooking(
     bookingId: string,
     tripId: string,

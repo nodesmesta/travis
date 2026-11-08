@@ -176,6 +176,18 @@ test("hotels are joined with their details, priced, and sorted", async () => {
   assert.ok(entry.cheapest.offer_id.length > 20);
 });
 
+test("a hotel limit trims our answer instead of being sent to the provider", async () => {
+  const { calls, fetchImpl } = recorder(() => json(HOTELS));
+  const result = await client(fetchImpl).searchHotels({
+    ...hotelRequest,
+    limit: 1,
+  });
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal("limit" in body, false);
+  assert.equal(result.hotels.length, 1);
+  assert.equal(result.total_found, 3);
+});
+
 test("a hotel price with no matching hotel details is dropped, not guessed", async () => {
   const body = structuredClone(HOTELS);
   body.hotels = body.hotels.slice(1);
@@ -211,16 +223,18 @@ test("a missing key fails without any network call", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("provider failures become structured errors, with no retry", async () => {
+test("provider failures become structured errors", async () => {
+  // 4xx answers that cannot succeed by repeating stay single-shot; transient
+  // ones are retried because a rate search is safe to repeat.
   const cases = [
-    [401, "EXTERNAL_PROVIDER_REJECTED"],
-    [403, "EXTERNAL_PROVIDER_REJECTED"],
-    [429, "EXTERNAL_PROVIDER_RATE_LIMITED"],
-    [400, "EXTERNAL_QUERY_INVALID"],
-    [500, "EXTERNAL_PROVIDER_ERROR"],
-    [503, "EXTERNAL_PROVIDER_ERROR"],
+    [401, "EXTERNAL_PROVIDER_REJECTED", 1],
+    [403, "EXTERNAL_PROVIDER_REJECTED", 1],
+    [400, "EXTERNAL_QUERY_INVALID", 1],
+    [429, "EXTERNAL_PROVIDER_RATE_LIMITED", 3],
+    [500, "EXTERNAL_PROVIDER_ERROR", 3],
+    [503, "EXTERNAL_PROVIDER_ERROR", 3],
   ];
-  for (const [status, code] of cases) {
+  for (const [status, code, attempts] of cases) {
     const { calls, fetchImpl } = recorder(() =>
       json({ error: { code: 1, description: "x" } }, status),
     );
@@ -229,7 +243,7 @@ test("provider failures become structured errors, with no retry", async () => {
     );
     assert.equal(error.code, code, `HTTP ${status}`);
     assert.equal(error.provider, "liteapi");
-    assert.equal(calls.length, 1, `HTTP ${status} must not be retried`);
+    assert.equal(calls.length, attempts, `HTTP ${status} attempts`);
     lacks(JSON.stringify(error.details ?? {}), KEY);
     lacks(error.message, KEY);
   }
@@ -375,7 +389,7 @@ const flightPrebookRequest = {
 test("a hotel prebook asks for no card payment and reports price movement", async () => {
   const { calls, fetchImpl } = recorder(() => json(BOOKING.hotelPrebook));
   const result = await client(fetchImpl).prebookHotel({ offer_id: "offer-1" });
-  assert.equal(calls[0].url, "https://api.liteapi.travel/v3.0/rates/prebook");
+  assert.equal(calls[0].url, "https://book.liteapi.travel/v3.0/rates/prebook");
   assert.deepEqual(JSON.parse(calls[0].init.body), {
     offerId: "offer-1",
     usePaymentSdk: false,
@@ -465,7 +479,7 @@ test("a hotel cancellation reports the fee and the refund", async () => {
   assert.equal(calls[0].init.method, "PUT");
   assert.equal(
     calls[0].url,
-    "https://api.liteapi.travel/v3.0/bookings/_5XLCOI4h",
+    "https://book.liteapi.travel/v3.0/bookings/_5XLCOI4h",
   );
   assert.equal(result.state, "cancelled");
   assert.equal(result.fee.amount, 0);
@@ -477,7 +491,7 @@ test("a booking id is encoded into the path and cannot escape it", async () => {
   await client(fetchImpl).getHotelBooking("a/b?c=d#e");
   assert.equal(
     calls[0].url,
-    "https://api.liteapi.travel/v3.0/bookings/a%2Fb%3Fc%3Dd%23e",
+    "https://book.liteapi.travel/v3.0/bookings/a%2Fb%3Fc%3Dd%23e",
   );
   const { calls: none, fetchImpl: other } = recorder(() => json({}));
   const error = await rejection(client(other).getHotelBooking("  "));
@@ -701,4 +715,94 @@ test("a cancellation that carries charges is still a cancellation", async () => 
   const result = await client(fetchImpl).getHotelBooking("x");
   assert.equal(result.state, "cancelled");
   assert.equal(result.provider_status, "CANCELLED_WITH_CHARGES");
+});
+
+test("a flight verify posts the offer id and reads the binding price", async () => {
+  const { calls, fetchImpl } = recorder(() =>
+    json({
+      data: [
+        {
+          journey: {
+            journeyKey: "26b2fa3085dc22b2",
+            pricing: { display: { total: 1423.42, currency: "USD" } },
+          },
+          changes: {
+            messages: ["Price changed since search"],
+            pricing: { old: { total: 1399 }, new: { total: 1423.42 } },
+          },
+        },
+      ],
+    }),
+  );
+  const result = await client(fetchImpl).verifyFlight("offer-1");
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(calls[0].url, "https://api.liteapi.travel/v3.0/flights/verify");
+  assert.equal(body.offerId, "offer-1");
+  assert.equal(result.offer_id, "offer-1");
+  assert.equal(result.journey_key, "26b2fa3085dc22b2");
+  assert.equal(result.total.amount, 1423.42);
+  assert.equal(result.total.currency, "USD");
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.messages, ["Price changed since search"]);
+});
+
+test("a flight verify without a changes block is reported as unchanged", async () => {
+  const { fetchImpl } = recorder(() =>
+    json({
+      data: [
+        {
+          journey: {
+            journeyKey: "abc",
+            pricing: { display: { total: 99.5, currency: "EUR" } },
+          },
+        },
+      ],
+    }),
+  );
+  const result = await client(fetchImpl).verifyFlight("offer-2");
+  assert.equal(result.changed, false);
+  assert.deepEqual(result.messages, []);
+  assert.equal(result.total.amount, 99.5);
+});
+
+test("a blank offer id is refused before the verify call", async () => {
+  const { calls, fetchImpl } = recorder(() => json({ data: [] }));
+  const error = await rejection(client(fetchImpl).verifyFlight("  "));
+  assert.equal(error.code, "EXTERNAL_QUERY_INVALID");
+  assert.equal(calls.length, 0);
+});
+
+const LOOKED_UP_BOOKING = {
+  bookingId: "bk_123",
+  status: "CONFIRMED",
+  hotelConfirmationCode: "CNF-9",
+  checkin: "2026-11-12",
+  checkout: "2026-11-14",
+  price: 62.69,
+  currency: "USD",
+};
+
+test("a booking is looked up by the client reference we stored", async () => {
+  const { calls, fetchImpl } = recorder(() =>
+    json({ data: [LOOKED_UP_BOOKING] }),
+  );
+  const result =
+    await client(fetchImpl).findHotelBookingByClientReference("travelflow-abc");
+  assert.equal(
+    calls[0].url,
+    "https://book.liteapi.travel/v3.0/bookings?clientReference=travelflow-abc&timeout=10",
+  );
+  assert.equal(result?.booking_id, "bk_123");
+  assert.equal(result?.confirmation_code, "CNF-9");
+  assert.equal(result?.state, "confirmed");
+  assert.equal(result?.total.amount, 62.69);
+});
+
+test("a missing booking by client reference is reported as null, not an error", async () => {
+  const { fetchImpl } = recorder(() => json({ data: [] }));
+  const result =
+    await client(fetchImpl).findHotelBookingByClientReference(
+      "travelflow-none",
+    );
+  assert.equal(result, null);
 });

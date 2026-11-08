@@ -17,6 +17,8 @@ export interface ViewProps {
   onContextsChanged?: () => Promise<void>;
   /** Opens the Invoices view, for the "View invoice" links after a payment succeeds. */
   onOpenInvoices?: () => void;
+  /** Opens the Bookings view, for the "All reservations" links after a provider booking. */
+  onOpenBookings?: () => void;
 }
 
 /** The Trips view must also work for a user who has no trip yet. */
@@ -29,8 +31,7 @@ export type ViewId =
   | "mobility"
   | "assistant"
   | "itinerary"
-  | "flights"
-  | "hotels"
+  | "bookings"
   | "alerts"
   | "invoices"
   | "trips";
@@ -38,15 +39,14 @@ export type ViewId =
 export const VIEWS: Array<{ id: ViewId; label: string; hint: string }> = [
   {
     id: "explore",
-    label: "Explore and book",
-    hint: "Events, activities, booking",
+    label: "Explore",
+    hint: "Discover stays, flights, events",
   },
+  { id: "bookings", label: "Bookings", hint: "Your reservations" },
+  { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
   { id: "mobility", label: "Mobility", hint: "Routes, weather, traffic" },
   { id: "assistant", label: "Assistant", hint: "Ask about your trip" },
-  { id: "itinerary", label: "Itinerary", hint: "Timeline and suggestions" },
-  { id: "flights", label: "Flights", hint: "LiteAPI flight rates" },
-  { id: "hotels", label: "Hotels", hint: "LiteAPI hotel rates" },
   { id: "alerts", label: "Alerts", hint: "What changed" },
   { id: "invoices", label: "Invoices", hint: "Receipts and email" },
-  { id: "trips", label: "Trips", hint: "Create or change a trip" },
+  { id: "trips", label: "Trips", hint: "Set up trip context" },
 ];

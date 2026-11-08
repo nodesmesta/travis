@@ -22,6 +22,21 @@ function providerFailure(error: unknown): boolean {
   );
 }
 
+/** The provider's own error code, e.g. 4005 for a duplicate client reference. */
+function providerErrorCode(error: unknown): number | string | null {
+  if (!(error instanceof ExternalDataError)) return null;
+  const details = error.details;
+  if (!details || typeof details !== "object") return null;
+  const providerError = (details as Record<string, unknown>).provider_error;
+  if (!providerError || typeof providerError !== "object") return null;
+  const code = (providerError as Record<string, unknown>).code;
+  return typeof code === "number" || typeof code === "string" ? code : null;
+}
+
+function duplicateClientReference(error: unknown): boolean {
+  return String(providerErrorCode(error)) === "4005";
+}
+
 export interface ProviderAttemptResult {
   booking: Booking;
   provider_booking: ProviderBooking;
@@ -35,6 +50,7 @@ export interface HotelPrebookResult extends ProviderAttemptResult {
 export interface FlightPrebookResult extends ProviderAttemptResult {
   kind: "flight";
   prebook: Awaited<ReturnType<LiteApiClient["prebookFlight"]>>;
+  verification: Awaited<ReturnType<LiteApiClient["verifyFlight"]>>;
 }
 
 export class LiteApiBookingService {
@@ -91,6 +107,9 @@ export class LiteApiBookingService {
     contact: Person & { phone_country_code: string; phone_number: string };
     passengers: FlightPassenger[];
   }): Promise<FlightPrebookResult> {
+    // The provider asks for a verify before every prebook so the price the
+    // guest is about to pay is the price the airline will honour.
+    const verification = await this.client.verifyFlight(input.offerId);
     const prebook = await this.client.prebookFlight({
       offer_id: input.offerId,
       purpose: input.purpose,
@@ -118,6 +137,7 @@ export class LiteApiBookingService {
       ...created,
       provider_booking: providerBooking,
       prebook,
+      verification,
     };
   }
 
@@ -155,12 +175,26 @@ export class LiteApiBookingService {
       provider_status: "BOOKING",
     });
     try {
-      const provider = await this.client.bookHotel({
-        prebook_id: attempt.prebook_id,
-        client_reference: attempt.client_reference,
-        holder: input.holder,
-        guests: input.guests,
-      });
+      const provider = await this.client
+        .bookHotel({
+          prebook_id: attempt.prebook_id,
+          client_reference: attempt.client_reference,
+          holder: input.holder,
+          guests: input.guests,
+        })
+        // A retry after a timeout can reach a booking that the first attempt
+        // already created. The provider answers 4005 for that duplicate
+        // reference, so adopt the booking it points at instead of failing.
+        .catch(async (error: unknown) => {
+          if (!duplicateClientReference(error)) throw error;
+          const existing = await this.client.findHotelBookingByClientReference(
+            attempt.client_reference,
+          );
+          // Only a live reservation can be adopted. A cancelled one means the
+          // reference is burnt, so the original failure stays visible.
+          if (!existing || existing.state !== "confirmed") throw error;
+          return existing;
+        });
       const state =
         provider.state === "confirmed" ? "confirmed" : provider.state;
       const providerBooking = await this.repository.updateProviderBooking(
@@ -169,6 +203,7 @@ export class LiteApiBookingService {
         {
           provider_booking_id: provider.booking_id,
           provider_status: provider.provider_status,
+          last_reconciled_at: new Date().toISOString(),
           state,
           confirmation_code: provider.confirmation_code,
           currency: provider.total.currency,
@@ -251,6 +286,7 @@ export class LiteApiBookingService {
         {
           provider_booking_id: provider.booking_id,
           provider_status: provider.provider_status,
+          last_reconciled_at: new Date().toISOString(),
           state,
           confirmation_code: provider.booking_reference,
           currency: provider.total.currency,

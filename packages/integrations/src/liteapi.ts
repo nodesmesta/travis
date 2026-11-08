@@ -11,7 +11,19 @@ import {
 } from "./provider-http.js";
 
 export const LITEAPI_PROVIDER = "liteapi";
-const DEFAULT_BASE_URL = "https://api.liteapi.travel/v3.0";
+// Search and flights live on the API host; the booking-management endpoints are
+// published on their own host in the provider's OpenAPI definitions.
+const API_BASE_URL = "https://api.liteapi.travel/v3.0";
+const BOOK_BASE_URL = "https://book.liteapi.travel/v3.0";
+
+function usesBookingHost(path: string): boolean {
+  return (
+    path === "/rates/prebook" ||
+    path === "/rates/book" ||
+    path === "/rates/rebook" ||
+    path.startsWith("/bookings")
+  );
+}
 
 export interface LiteApiConfig {
   apiKey: string | undefined;
@@ -21,6 +33,8 @@ export interface LiteApiConfig {
   fetchImpl?: typeof fetch;
   /** Only the validation harness uses this, to serve documented response shapes. */
   baseUrl?: string;
+  /** Booking-management host; defaults to the provider's published book host. */
+  bookBaseUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +118,8 @@ export interface HotelOffer {
 
 export interface HotelSearchResult {
   hotels: Array<{ hotel: HotelStay; cheapest: HotelOffer }>;
+  /** How many bookable hotels the provider returned before the limit was applied. */
+  total_found: number;
   retrieved_at: string;
   provider_request_id: string | null;
   sandbox: boolean;
@@ -253,6 +269,17 @@ export interface FlightPrebookRequest {
 export interface FlightPrebook {
   prebook_id: string;
   total: Money;
+}
+
+/** `POST /flights/verify`: the price the provider will honour right before booking. */
+export interface FlightOfferVerification {
+  offer_id: string;
+  journey_key: string;
+  total: Money;
+  /** True when the provider reported a price or fare change since the search. */
+  changed: boolean;
+  messages: string[];
+  verified_at: string;
 }
 
 export interface FlightBooking {
@@ -470,6 +497,20 @@ export class LiteApiClient {
     return Boolean(this.config.apiKey);
   }
 
+  /**
+   * Only calls that cannot create or cancel a reservation are repeated. Rate
+   * searches, verify, reads and cancels quotes are safe; prebook, book and
+   * cancel are not, so they get exactly one attempt.
+   */
+  private retriesFor(method: "GET" | "POST" | "PUT", path: string): number {
+    if (method === "GET") return 2;
+    const safeToRepeat =
+      path === "/hotels/rates" ||
+      path === "/flights/rates" ||
+      path === "/flights/verify";
+    return safeToRepeat ? 2 : 0;
+  }
+
   private async request(
     method: "GET" | "POST" | "PUT",
     path: string,
@@ -479,7 +520,9 @@ export class LiteApiClient {
     if (!this.config.apiKey) {
       throw missingConfiguration(LITEAPI_PROVIDER, "LiteAPI");
     }
-    const base = this.config.baseUrl ?? DEFAULT_BASE_URL;
+    const base = usesBookingHost(path)
+      ? (this.config.bookBaseUrl ?? BOOK_BASE_URL)
+      : (this.config.baseUrl ?? API_BASE_URL);
     return callProviderJson({
       provider: LITEAPI_PROVIDER,
       label,
@@ -493,6 +536,7 @@ export class LiteApiClient {
       // The key travels in a header, so there is no query parameter to strip.
       keyParam: "x-api-key",
       exposeClientErrors: true,
+      retries: this.retriesFor(method, path),
     });
   }
 
@@ -567,10 +611,9 @@ export class LiteApiClient {
         guestNationality: request.guest_nationality,
         maxRatesPerHotel: 1,
         timeout: 12,
-        limit,
       },
     );
-    return normalizeHotelSearch(result);
+    return normalizeHotelSearch(result, limit);
   }
 
   // -------------------------------------------------------------------------
@@ -638,6 +681,28 @@ export class LiteApiClient {
     return normalizeHotelBooking(result);
   }
 
+  /**
+   * `GET /bookings?clientReference=...`: finds a booking created with our own
+   * idempotency reference. Used when a book retry hits the provider's duplicate
+   * code (4005) after the first attempt actually succeeded.
+   */
+  public async findHotelBookingByClientReference(
+    clientReference: string,
+  ): Promise<HotelBooking | null> {
+    if (nonBlankString(clientReference) === null) {
+      throw queryInvalid("client_reference is required.");
+    }
+    const query = `?clientReference=${encodeURIComponent(clientReference)}&timeout=10`;
+    const result = await this.request(
+      "GET",
+      `/bookings${query}`,
+      "LiteAPI hotel booking lookup",
+    );
+    const rows = asRecord(result.json)?.data;
+    if (Array.isArray(rows) && rows.length === 0) return null;
+    return normalizeHotelBooking(result);
+  }
+
   /** `PUT /bookings/{id}`: cancels. The answer states the fee and the refund. */
   public async cancelHotelBooking(
     bookingId: string,
@@ -649,6 +714,23 @@ export class LiteApiClient {
       "LiteAPI hotel cancellation",
     );
     return normalizeHotelCancellation(result);
+  }
+
+  /**
+   * `POST /flights/verify`: confirms the offer is still live and returns the
+   * binding price. The provider asks for this before every prebook.
+   */
+  public async verifyFlight(offerId: string): Promise<FlightOfferVerification> {
+    if (nonBlankString(offerId) === null) {
+      throw queryInvalid("offer_id is required.");
+    }
+    const result = await this.request(
+      "POST",
+      "/flights/verify",
+      "LiteAPI flight verification",
+      { offerId },
+    );
+    return normalizeFlightVerification(result, offerId);
   }
 
   /**
@@ -683,6 +765,7 @@ export class LiteApiClient {
           ...contact,
           phoneCountryCode: request.contact.phone_country_code,
           phoneNumber: request.contact.phone_number,
+          phone: `+${request.contact.phone_country_code}${request.contact.phone_number}`,
         },
         passengers,
       },
@@ -839,7 +922,10 @@ function normalizeFlightOffer(value: unknown): FlightOffer {
   };
 }
 
-export function normalizeHotelSearch(result: ProviderJson): HotelSearchResult {
+export function normalizeHotelSearch(
+  result: ProviderJson,
+  limit?: number,
+): HotelSearchResult {
   const root = asRecord(result.json);
   const content = new Map<string, Record<string, unknown>>();
   for (const entry of Array.isArray(root?.hotels) ? root.hotels : []) {
@@ -859,8 +945,10 @@ export function normalizeHotelSearch(result: ProviderJson): HotelSearchResult {
     hotels.push({ hotel: normalizeHotel(hotelId, info), cheapest });
   }
   hotels.sort((a, b) => a.cheapest.total.amount - b.cheapest.total.amount);
+  const totalFound = hotels.length;
   return {
-    hotels,
+    hotels: limit === undefined ? hotels : hotels.slice(0, limit),
+    total_found: totalFound,
     retrieved_at: new Date().toISOString(),
     provider_request_id: result.providerRequestId,
     sandbox: root?.sandbox === true,
@@ -1065,6 +1153,30 @@ export function normalizeFlightPrebook(result: ProviderJson): FlightPrebook {
   return {
     prebook_id: required(nonBlankString(data.prebookId), "prebookId"),
     total: moneyFrom(data.price, data.currency, "prebook price"),
+  };
+}
+
+export function normalizeFlightVerification(
+  result: ProviderJson,
+  offerId: string,
+): FlightOfferVerification {
+  const entry = dataRecord(result, "verified journey");
+  const journey = asRecord(entry.journey) ?? entry;
+  const display = asRecord(asRecord(journey.pricing)?.display);
+  const changes = asRecord(entry.changes);
+  const messages = Array.isArray(changes?.messages)
+    ? changes.messages.filter(
+        (message): message is string =>
+          typeof message === "string" && message.trim().length > 0,
+      )
+    : [];
+  return {
+    offer_id: offerId,
+    journey_key: nonBlankString(journey.journeyKey) ?? "",
+    total: moneyFrom(display?.total, display?.currency, "verified price"),
+    changed: changes !== null,
+    messages,
+    verified_at: new Date().toISOString(),
   };
 }
 

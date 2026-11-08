@@ -66,6 +66,25 @@ export interface EventDiscoveryResponse {
   limitations?: string[];
 }
 
+export interface ProviderBookingSummary {
+  id: string;
+  booking_id: string;
+  booking_type: "hotel" | "flight";
+  provider: "liteapi";
+  state: string;
+  provider_status: string | null;
+  provider_booking_id: string | null;
+  client_reference: string;
+  confirmation_code: string | null;
+  currency: string;
+  cancellation_fee: number | null;
+  refund_amount: number | null;
+  checkin: string | null;
+  checkout: string | null;
+  ticket_deadline: string | null;
+  last_reconciled_at: string | null;
+}
+
 export interface Booking {
   id: string;
   user_id: string;
@@ -85,6 +104,7 @@ export interface Booking {
   starts_at?: string;
   ends_at?: string;
   cancelled_at?: string;
+  provider_booking?: ProviderBookingSummary;
   created_at: string;
   updated_at: string;
 }

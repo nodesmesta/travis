@@ -1,16 +1,29 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiClientError, simulatePayment } from "../../lib/api";
 import {
   bookFlight,
+  getFlightBooking,
   prebookFlight,
   searchFlights,
   type FlightJourney,
   type FlightPrebookAttempt,
   type FlightSearchResponse,
+  type ProviderActionResponse,
 } from "../../lib/api-liteapi";
+import {
+  ProviderBookingActions,
+  ProviderBookingStatus,
+  cancellableState,
+  providerStateLabel,
+  providerStateTone,
+} from "./provider-booking-parts";
 import type { ViewProps } from "./types";
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 function datePart(value: string | null): string {
   return value ? value.slice(0, 10) : "";
@@ -70,15 +83,20 @@ function JourneyCard({
   );
 }
 
-export default function FlightsView({ trip }: ViewProps) {
+export default function FlightsView({
+  trip,
+  onOpenInvoices,
+  onOpenBookings,
+}: ViewProps) {
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [date, setDate] = useState(datePart(trip.start_at));
   const [result, setResult] = useState<FlightSearchResponse | null>(null);
   const [selected, setSelected] = useState<FlightJourney | null>(null);
   const [prebook, setPrebook] = useState<FlightPrebookAttempt | null>(null);
-  const [booked, setBooked] = useState(false);
-  const [bookedState, setBookedState] = useState<string | null>(null);
+  const [booked, setBooked] = useState<ProviderActionResponse | null>(null);
+  const [polling, setPolling] = useState(false);
+  const pollToken = useRef(0);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -99,8 +117,9 @@ export default function FlightsView({ trip }: ViewProps) {
     setResult(null);
     setSelected(null);
     setPrebook(null);
-    setBooked(false);
-    setBookedState(null);
+    setBooked(null);
+    setPolling(false);
+    pollToken.current += 1;
     setError(null);
   }, [trip.id, trip.start_at]);
 
@@ -110,8 +129,9 @@ export default function FlightsView({ trip }: ViewProps) {
     setError(null);
     setSelected(null);
     setPrebook(null);
-    setBooked(false);
-    setBookedState(null);
+    setBooked(null);
+    setPolling(false);
+    pollToken.current += 1;
     try {
       setResult(
         await searchFlights(trip.id, {
@@ -165,8 +185,13 @@ export default function FlightsView({ trip }: ViewProps) {
       setPrebook(next);
       await simulatePayment(trip.id, next.booking.id, "succeeded");
       const bookingResult = await bookFlight(trip.id, next.provider_booking.id);
-      setBookedState(bookingResult.provider_booking.state);
-      setBooked(true);
+      setBooked(bookingResult);
+      if (
+        bookingResult.provider_booking.state === "pending" ||
+        bookingResult.provider_booking.state === "booking"
+      ) {
+        void pollProviderStatus(bookingResult.provider_booking.id);
+      }
     } catch (caught) {
       setError(errorText(caught));
     } finally {
@@ -174,19 +199,29 @@ export default function FlightsView({ trip }: ViewProps) {
     }
   }
 
+  async function pollProviderStatus(providerBookingId: string) {
+    const token = pollToken.current + 1;
+    pollToken.current = token;
+    setPolling(true);
+    try {
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await wait(attempt === 0 ? 3000 : 5000);
+        if (token !== pollToken.current) return;
+        const response = await getFlightBooking(trip.id, providerBookingId);
+        if (token !== pollToken.current) return;
+        setBooked(response);
+        const state = response.provider_booking.state;
+        if (state !== "pending" && state !== "booking") return;
+      }
+    } catch (caught) {
+      if (token === pollToken.current) setError(errorText(caught));
+    } finally {
+      if (token === pollToken.current) setPolling(false);
+    }
+  }
+
   return (
     <div className="view-stack">
-      <div className="welcome-row">
-        <div>
-          <p className="eyebrow">LITEAPI FLIGHT SEARCH</p>
-          <h1>Compare flights for the trip.</h1>
-          <p className="lede">
-            Searches use live LiteAPI sandbox inventory. Ticketing uses the
-            provider sandbox card and never charges a real card.
-          </p>
-        </div>
-        <span className="sun-badge">✈</span>
-      </div>
       {error ? <div className="status-banner error">{error}</div> : null}
       <section
         className="panel discovery-panel"
@@ -269,8 +304,8 @@ export default function FlightsView({ trip }: ViewProps) {
                 onSelect={() => {
                   setSelected(journey);
                   setPrebook(null);
-                  setBooked(false);
-                  setBookedState(null);
+                  setBooked(null);
+                  pollToken.current += 1;
                 }}
               />
             ))}
@@ -361,23 +396,80 @@ export default function FlightsView({ trip }: ViewProps) {
           </div>
           <button
             className="button accent"
-            disabled={busy || booked}
+            disabled={busy || booked !== null}
             onClick={() => void checkout()}
             type="button"
           >
             {booked
-              ? bookedState === "confirmed"
-                ? "Sandbox booking confirmed"
-                : `Provider status: ${bookedState ?? "pending"}`
+              ? "Sandbox payment completed"
               : busy
                 ? "Prebooking and ticketing…"
                 : "Pay sandbox payment and book"}
           </button>
+          {prebook?.verification ? (
+            <p className="helper-text">
+              {prebook.verification.changed
+                ? `Price changed since the search (${prebook.verification.messages[0] ?? "provider update"}). Verified total ${prebook.verification.total.currency} ${prebook.verification.total.amount}.`
+                : `Price verified at ${prebook.verification.total.currency} ${prebook.verification.total.amount} just now.`}
+            </p>
+          ) : null}
           {prebook ? (
             <p className="helper-text">
               Prebook {prebook.prebook.prebook_id} · local booking{" "}
               {prebook.booking.id}
             </p>
+          ) : null}
+          {booked ? (
+            <div className="provider-result">
+              <div className="provider-result-head">
+                <div>
+                  <p className="eyebrow">PROVIDER RESULT</p>
+                  <span className="provider-label">Confirmation code</span>
+                  <strong className="provider-code">
+                    {booked.provider_booking.confirmation_code ??
+                      booked.booking.confirmation_code ??
+                      "Not issued yet"}
+                  </strong>
+                </div>
+                <span
+                  className={`booking-status ${providerStateTone(booked.provider_booking.state)}`}
+                >
+                  {providerStateLabel(booked.provider_booking.state)}
+                </span>
+              </div>
+              {polling ? (
+                <p className="helper-text" role="status">
+                  Checking the provider for the ticket status…
+                </p>
+              ) : null}
+              <ProviderBookingStatus
+                provider={booked.provider_booking}
+                bookingType="flight"
+              />
+              <ProviderBookingActions
+                tripId={trip.id}
+                bookingType="flight"
+                providerBookingId={booked.provider_booking.id}
+                canCancel={cancellableState(booked.provider_booking.state)}
+                onUpdated={setBooked}
+              />
+              <div className="provider-action-row">
+                <button
+                  className="button ghost"
+                  onClick={onOpenBookings}
+                  type="button"
+                >
+                  All reservations
+                </button>
+                <button
+                  className="button ghost"
+                  onClick={onOpenInvoices}
+                  type="button"
+                >
+                  Invoices
+                </button>
+              </div>
+            </div>
           ) : null}
         </section>
       ) : null}

@@ -40,6 +40,7 @@ export interface HotelOffer {
 }
 export interface HotelSearchResponse {
   hotels: Array<{ hotel: HotelStay; cheapest: HotelOffer }>;
+  total_found?: number;
   retrieved_at: string;
   provider_request_id: string | null;
   sandbox: boolean;
@@ -99,6 +100,7 @@ export interface FlightSearchResponse {
 export interface ProviderBookingView {
   id: string;
   booking_id: string;
+  provider: "liteapi";
   booking_type: "hotel" | "flight";
   offer_id: string;
   prebook_id: string | null;
@@ -116,6 +118,7 @@ export interface ProviderBookingView {
   ticket_deadline: string | null;
   cancellation_fee: number | null;
   refund_amount: number | null;
+  last_reconciled_at: string | null;
 }
 export interface ProviderAttemptResponse {
   booking: Booking;
@@ -126,9 +129,18 @@ export interface HotelPrebookAttempt extends ProviderAttemptResponse {
   kind: "hotel";
   prebook: HotelPrebookResponse;
 }
+export interface FlightOfferVerificationView {
+  offer_id: string;
+  journey_key: string;
+  total: HotelMoney;
+  changed: boolean;
+  messages: string[];
+  verified_at: string;
+}
 export interface FlightPrebookAttempt extends ProviderAttemptResponse {
   kind: "flight";
   prebook: { prebook_id: string; total: HotelMoney };
+  verification?: FlightOfferVerificationView;
 }
 export interface ProviderActionResponse extends ProviderAttemptResponse {
   provider?: unknown;
