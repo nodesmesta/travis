@@ -180,7 +180,7 @@ npm run dev:web:local              # web app on http://localhost:3000
 npm run start:worker:local         # background worker (alerts, invoices, email)
 ```
 
-Sign in with `DEMO_EMAIL` and `DEMO_PASSWORD` from `.env.local`. The seed creates one trip ("Jakarta Business Trip", 12 to 14 November 2026, Asia/Jakarta) with three places: Hotel Indonesia Kempinski, Jakarta Convention Center and Soekarno-Hatta International Airport. It creates no agenda items and no journey legs. Create a journey leg in the Trips view before using Mobility. The step-by-step demo is in [docs/demo-script.md](docs/demo-script.md).
+The login screen has one button, "Continue with Google". `bootstrap:local` also sets `NEXT_PUBLIC_ENABLE_PASSWORD_LOGIN=true` in `.env.local`, which adds a small "Local test sign-in" form for the demo account (`DEMO_EMAIL` and `DEMO_PASSWORD` from `.env.local`). That form exists because the browser test scripts cannot drive Google's consent screen. It is not shown when the flag is unset, which is the production setup, and the deployed Supabase Auth server refuses password sign-in anyway. To try the Google button against the local stack you need your own OAuth client: set `GOOGLE_CLIENT_ID` and `GOOGLE_SECRET` and enable the provider in `supabase/config.toml`; this has not been tried locally. The seed creates one trip ("Jakarta Business Trip", 12 to 14 November 2026, Asia/Jakarta) with three places: Hotel Indonesia Kempinski, Jakarta Convention Center and Soekarno-Hatta International Airport. It creates no agenda items and no journey legs. Create a journey leg in the Trips view before using Mobility. The step-by-step demo is in [docs/demo-script.md](docs/demo-script.md).
 
 ## Tests and validators
 

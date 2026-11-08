@@ -275,6 +275,10 @@ function writeEnvFile() {
     ],
     ["DEMO_EMAIL", demoEmail],
     ["DEMO_PASSWORD", demoPassword],
+    // Local only: shows the email and password form next to "Continue with Google".
+    // The browser test scripts cannot drive Google's consent screen. Production builds
+    // never set this, so the deployed app has Google sign-in only.
+    ["NEXT_PUBLIC_ENABLE_PASSWORD_LOGIN", "true"],
   ]);
   // Provider keys are owned by the developer. Every key that is not managed above is
   // kept as it is, so a re-run never drops a setting (EMAIL_*, SMTP_*, WORKER_*, ...).

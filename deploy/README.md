@@ -83,6 +83,47 @@ Each step lists what is verified.
 4. Find what this stack needs to join the Supabase network: `docker network ls` (name for `SUPABASE_DOCKER_NETWORK`) and `docker compose ps` in the Supabase directory (gateway service name and port for `SUPABASE_AUTH_UPSTREAM` and `SUPABASE_URL`). The official docs describe an Envoy gateway on port 8000 by default; local verification used the CLI's Kong container (`supabase_kong_vultr:8000`). **Use the names you see; do not copy the local ones.**
 5. **Key format check (open question).** The app reads `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` and was tested only with the JWT-style keys of the local CLI. The current official self-hosted stack documents new-style publishable/secret keys (`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`) next to the legacy JWT keys ([Configure new API keys](https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys)). Confirm that the app signs in and that the API accepts the user's token with the keys you choose before the demo.
 
+#### Google-only sign-in (Supabase Auth)
+
+The app signs users in with Google and nothing else. The web app only shows a password form when `NEXT_PUBLIC_ENABLE_PASSWORD_LOGIN` is set, which production never does (the form code is still in the bundle, just not rendered). Hiding a form is not enough anyway: Caddy forwards all of `/auth/v1/*`, so the Auth server itself must refuse every other way in. On a default Supabase install several are open. In particular `ENABLE_PHONE_SIGNUP=true` together with `ENABLE_PHONE_AUTOCONFIRM=true` lets anyone register by phone number and be confirmed without any SMS check.
+
+1. In Google Cloud, open **Google Auth Platform**:
+   - **Audience**: type External, and set the publishing status to **In production**. While it is _Testing_, only listed test users can sign in.
+   - **Data Access**: scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` only. Extra scopes can trigger a long verification.
+   - **Clients**: create a _Web application_ client. Authorized JavaScript origin `https://<SITE_ADDRESS>`. Authorized redirect URI `https://<SITE_ADDRESS>/auth/v1/callback` (it must equal `API_EXTERNAL_URL` plus `/callback`, character for character).
+2. In the Supabase project `.env` set `GOOGLE_ENABLED=true`, `GOOGLE_CLIENT_ID`, `GOOGLE_SECRET`, and turn the other doors off:
+
+   ```text
+   ENABLE_EMAIL_SIGNUP=false
+   ENABLE_PHONE_SIGNUP=false
+   ENABLE_ANONYMOUS_USERS=false
+   DISABLE_SIGNUP=false        # keep false: Google accounts create their own user
+   ```
+
+3. The upstream compose file ships the `GOTRUE_EXTERNAL_GOOGLE_*` lines commented out. Do not edit that file; add an override and list it in `COMPOSE_FILE` next to the loopback override:
+
+   ```yaml
+   # docker-compose.travelflow-auth.yml
+   services:
+     auth:
+       environment:
+         GOTRUE_EXTERNAL_GOOGLE_ENABLED: ${GOOGLE_ENABLED}
+         GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+         GOTRUE_EXTERNAL_GOOGLE_SECRET: ${GOOGLE_SECRET}
+         GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI: ${API_EXTERNAL_URL}/callback
+   ```
+
+   Then `docker compose up -d --wait` recreates the services whose configuration changed.
+
+4. Verify on the server against the loopback gateway (use the anon key as `apikey`):
+   - `GET /auth/v1/settings`: `external` lists only `google: true`.
+   - `POST /auth/v1/signup` with an email: `Email signups are disabled`. With a phone number: `phone_provider_disabled`. `POST /auth/v1/token?grant_type=password`: `Email logins are disabled`. `POST /auth/v1/otp`: refused. Anonymous sign-up: refused.
+   - `GET /auth/v1/authorize?provider=google`: 302 to `accounts.google.com` with the expected `client_id` and `redirect_uri`.
+
+   Status on the staging VM (8 November 2026): all of the above passed. **Not verified:** a real sign-in in a browser through Google, which needs HTTPS on the public name. Google does not validate the redirect URI until after the user signs in, so it cannot be checked earlier from outside.
+
+The web build needs `NEXT_PUBLIC_SUPABASE_URL=https://<SITE_ADDRESS>` and the anon key. Do **not** set `NEXT_PUBLIC_ENABLE_PASSWORD_LOGIN` in `.env.production`: it only exists for local development and the browser test scripts.
+
 ### 2. Migrations (after Supabase is healthy)
 
 **NOT VERIFIED on Vultr.** Locally, migrations are applied by `supabase db reset --yes`, which this task did not run.
