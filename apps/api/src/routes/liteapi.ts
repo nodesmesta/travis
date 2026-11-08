@@ -19,7 +19,9 @@ import { SupabaseIdempotencyStore } from "../repositories/domain-persistence.js"
 import { LiteApiBookingRepository } from "../repositories/liteapi-booking-repository.js";
 import { SupabaseTripContextRepository } from "../repositories/trip-context-repository.js";
 import { matchPath } from "../routing.js";
-import { LiteApiBookingService } from "../services/liteapi-booking-service.js";
+import { LiteApiBookingService, type BookingFollowUp } from "../services/liteapi-booking-service.js";
+import type { BookingPlaceResolver } from "../services/trip-booking-link-service.js";
+import { createAdminSupabaseClient } from "../supabase/client.js";
 import { queueInvoiceAfterPayment } from "./invoices.js";
 import type {
   AuthenticatedSession,
@@ -565,10 +567,84 @@ function makeService(
   context: RequestContext,
   session: AuthenticatedSession,
 ): LiteApiBookingService {
+  const client = makeClient(context);
   return new LiteApiBookingService(
     new LiteApiBookingRepository(session.client),
-    makeClient(context),
+    client,
+    makePlaceResolver(client),
+    makeFollowUp(context),
   );
+}
+
+/**
+ * The first read a new trip needs: the weather where its ticket lands. It is queued
+ * as the same `refresh_weather` job the worker already runs, so the snapshot and the
+ * alerts that follow it come from one code path. A failure is logged and never
+ * reports the booking as failed — the ticket exists either way.
+ */
+function makeFollowUp(context: RequestContext): BookingFollowUp {
+  return {
+    async weatherAt(input) {
+      const admin = createAdminSupabaseClient(context.config);
+      const { error } = await admin.from("background_jobs").insert({
+        trip_id: input.tripId,
+        user_id: input.userId,
+        job_type: "refresh_weather",
+        payload: { context_point_id: input.contextPointId },
+        // One read per booking of a place: a retried request cannot queue a second.
+        idempotency_key: `booking_weather:${input.bookingId}:${input.contextPointId}`,
+        correlation_id: context.requestId,
+        created_by: input.userId,
+      });
+      // 23505 means this booking already queued its read; that is the intended state.
+      if (error && error.code !== "23505") {
+        context.logger.error("booking.weather_follow_up_failed", {
+          request_id: context.requestId,
+          trip_id: input.tripId,
+          context_point_id: input.contextPointId,
+          error_code: error.code ?? null,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * The coordinates a booking does not carry. The provider is the only source: a hotel
+ * id becomes the hotel's own location and an IATA code becomes the airport's, so the
+ * trip can reason about the place it is actually going to.
+ */
+function makePlaceResolver(client: LiteApiClient): BookingPlaceResolver {
+  return {
+    async hotel(hotelId: string) {
+      const content = await client.getHotelContent(hotelId);
+      return {
+        type: "hotel" as const,
+        label: content.name,
+        address: content.address,
+        latitude: content.latitude,
+        longitude: content.longitude,
+        externalPlaceId: content.hotel_id || hotelId,
+      };
+    },
+    async airport(iata: string) {
+      const found = await client.searchAirports(iata);
+      const code = iata.trim().toUpperCase();
+      const match = found.find((airport) => airport.iata === code) ?? null;
+      if (!match) return null;
+      const place = [match.city, match.country].filter(
+        (part) => part.length > 0,
+      );
+      return {
+        type: "airport" as const,
+        label: match.city.length > 0 ? `${match.city} · ${match.name}` : match.name,
+        address: place.length > 0 ? place.join(", ") : null,
+        latitude: match.lat,
+        longitude: match.lon,
+        externalPlaceId: match.iata,
+      };
+    },
+  };
 }
 
 async function executeIdempotent<T>(

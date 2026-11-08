@@ -1,5 +1,9 @@
 import type { LiteApiBookingRepository } from "../repositories/liteapi-booking-repository.js";
-import type { Booking, ProviderBooking } from "../supabase/database.types.js";
+import type {
+  Booking,
+  ContextPoint,
+  ProviderBooking,
+} from "../supabase/database.types.js";
 
 /**
  * One leg of the itinerary the traveller booked, as the search showed it. The
@@ -18,6 +22,28 @@ export interface FlightScheduleSegment {
 
 export interface FlightSchedule {
   segments: FlightScheduleSegment[];
+}
+
+/** Where a booked item happens, as the provider describes it. */
+export interface BookingPlace {
+  type: "hotel" | "airport";
+  /** What the traveller reads: the hotel name, or `SIN · Singapore Changi Airport`. */
+  label: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  /** The provider's own id for the place: a hotel id or an IATA code. */
+  externalPlaceId: string;
+}
+
+/**
+ * The only source of truth for a booked place is the provider. A booking names a
+ * hotel id or airport codes, not coordinates, so the coordinates are looked up
+ * rather than invented.
+ */
+export interface BookingPlaceResolver {
+  hotel(hotelId: string): Promise<BookingPlace | null>;
+  airport(iata: string): Promise<BookingPlace | null>;
 }
 
 /** `2026-12-01T15:00:00+07:00` for a wall-clock time in `timezone`. */
@@ -52,14 +78,29 @@ function later(current: string | null, candidate: string): string {
   return Date.parse(candidate) > Date.parse(current) ? candidate : current;
 }
 
+/** A place the provider could not describe. Kept, so the gap is visible in the data. */
+interface PlaceLookup {
+  place: BookingPlace | null;
+  error: string | null;
+}
+
+/** What a linked booking gave the trip: the place the other services can reason about. */
+export interface LinkedItem {
+  contextPointId: string | null;
+}
+
 /**
  * A booking is not a separate artefact from the trip: once a ticket is issued the
- * trip gains that item, covers its dates and leaves the draft state. Cancelling
- * the ticket cancels the item, so the itinerary never shows a dead booking.
+ * trip gains that item, covers its dates, and gains the place it happens at.
+ * Without that place neither the weather nor the alerts nor the assistant has
+ * anything to reason about, so the location is part of the same write.
+ *
+ * Cancelling the ticket cancels the item, so the itinerary never shows a dead booking.
  */
 export class TripBookingLinkService {
   public constructor(
     private readonly repository: LiteApiBookingRepository,
+    private readonly places: BookingPlaceResolver | null = null,
   ) {}
 
   /** The hotel stay: check-in at 15:00, check-out at 12:00, in trip time. */
@@ -68,14 +109,24 @@ export class TripBookingLinkService {
     booking: Booking;
     providerBooking: ProviderBooking;
     hotelName: string | null;
-  }): Promise<void> {
+  }): Promise<LinkedItem> {
     const trip = await this.repository.getTrip(input.tripId);
-    if (!trip) return;
+    if (!trip) return { contextPointId: null };
     const checkin = input.providerBooking.checkin;
     const checkout = input.providerBooking.checkout;
-    if (!checkin || !checkout) return;
+    if (!checkin || !checkout) return { contextPointId: null };
     const start = zonedInstant(checkin.slice(0, 10), "15:00", trip.timezone);
     const end = zonedInstant(checkout.slice(0, 10), "12:00", trip.timezone);
+    const hotelId = hotelIdOf(input.providerBooking);
+    const lookup = await this.lookUp(
+      hotelId === null ? null : () => this.requirePlaces().hotel(hotelId),
+    );
+    const point = await this.placeFor(
+      input.tripId,
+      trip.timezone,
+      lookup,
+      input.providerBooking.state === "confirmed" ? "confirmed" : "unconfirmed",
+    );
     await this.upsertItem({
       tripId: input.tripId,
       timezone: trip.timezone,
@@ -90,13 +141,17 @@ export class TripBookingLinkService {
         input.providerBooking.confirmation_code ?? input.booking.confirmation_code,
       total: input.booking.total,
       currency: input.booking.currency,
+      contextPointId: point?.id ?? null,
+      // A stay is indoors; the weather rules are for what the traveller does outside.
+      exposure: "indoor",
       extra: {
-        hotel_id: (input.providerBooking.metadata as { hotel_id?: string } | null)
-          ?.hotel_id ?? null,
+        hotel_id: hotelId,
         checkin: input.providerBooking.checkin,
         checkout: input.providerBooking.checkout,
+        ...(lookup.error === null ? {} : { context_error: lookup.error }),
       },
     });
+    return { contextPointId: point?.id ?? null };
   }
 
   /** The flown itinerary: first departure to last arrival, as booked. */
@@ -105,13 +160,23 @@ export class TripBookingLinkService {
     booking: Booking;
     providerBooking: ProviderBooking;
     schedule: FlightSchedule | null;
-  }): Promise<void> {
+  }): Promise<LinkedItem> {
     const trip = await this.repository.getTrip(input.tripId);
-    if (!trip) return;
+    if (!trip) return { contextPointId: null };
     const segments = input.schedule?.segments ?? [];
     const first = segments[0];
     const last = segments[segments.length - 1];
-    if (!first || !last) return;
+    if (!first || !last) return { contextPointId: null };
+    // The destination is where the traveller actually spends the trip.
+    const lookup = await this.lookUp(() =>
+      this.requirePlaces().airport(last.destination_code),
+    );
+    const point = await this.placeFor(
+      input.tripId,
+      trip.timezone,
+      lookup,
+      input.providerBooking.state === "confirmed" ? "confirmed" : "unconfirmed",
+    );
     await this.upsertItem({
       tripId: input.tripId,
       timezone: trip.timezone,
@@ -126,6 +191,9 @@ export class TripBookingLinkService {
         input.providerBooking.confirmation_code ?? input.booking.confirmation_code,
       total: input.booking.total,
       currency: input.booking.currency,
+      contextPointId: point?.id ?? null,
+      // The flight itself is indoors; the weather matters for the days around it.
+      exposure: "indoor",
       extra: {
         segments: segments.map((segment) => ({
           from: segment.origin_code,
@@ -136,8 +204,10 @@ export class TripBookingLinkService {
           flight_number: segment.flight_number,
         })),
         times_are_airport_local: true,
+        ...(lookup.error === null ? {} : { context_error: lookup.error }),
       },
     });
+    return { contextPointId: point?.id ?? null };
   }
 
   /** Cancelling the ticket takes the item off the itinerary. */
@@ -156,6 +226,80 @@ export class TripBookingLinkService {
     });
   }
 
+  private requirePlaces(): BookingPlaceResolver {
+    if (!this.places) {
+      throw new Error("The booking has no place resolver.");
+    }
+    return this.places;
+  }
+
+  /**
+   * A provider lookup that fails must not unmake a ticket the traveller already
+   * paid for. The failure is returned instead of thrown, and the caller records it
+   * on the item so the missing place is visible rather than silently absent.
+   */
+  private async lookUp(
+    resolve: (() => Promise<BookingPlace | null>) | null,
+  ): Promise<PlaceLookup> {
+    if (resolve === null) {
+      return { place: null, error: "The booking names no place." };
+    }
+    try {
+      const place = await resolve();
+      return { place, error: place === null ? "The provider knows no location." : null };
+    } catch (error) {
+      return {
+        place: null,
+        error: error instanceof Error ? error.message : "The place lookup failed.",
+      };
+    }
+  }
+
+  /** The trip's location for a booked place: reused when it already exists. */
+  private async placeFor(
+    tripId: string,
+    timezone: string,
+    lookup: PlaceLookup,
+    confirmation: "confirmed" | "unconfirmed",
+  ): Promise<ContextPoint | null> {
+    const place = lookup.place;
+    if (!place) return null;
+    const latitude = place.latitude;
+    const longitude = place.longitude;
+    const resolved = latitude !== null && longitude !== null;
+    const patch = {
+      type: place.type,
+      label: place.label,
+      address: place.address,
+      latitude,
+      longitude,
+      resolution_status: resolved ? ("resolved" as const) : ("unresolved" as const),
+      confirmation_status: confirmation,
+    };
+    try {
+      const existing = await this.repository.findContextPointForPlace(
+        tripId,
+        place.externalPlaceId,
+      );
+      if (existing) {
+        return await this.repository.updateContextPoint(existing.id, tripId, patch);
+      }
+      return await this.repository.createContextPoint({
+        trip_id: tripId,
+        timezone,
+        external_place_id: place.externalPlaceId,
+        source: "booking_import",
+        ...patch,
+      });
+    } catch (error) {
+      // The booking is already confirmed upstream; a location write must not fail
+      // the request. The reason is handed back so the item records it.
+      lookup.error =
+        error instanceof Error ? error.message : "The location could not be saved.";
+      return null;
+    }
+  }
+
   private async upsertItem(input: {
     tripId: string;
     timezone: string;
@@ -169,6 +313,8 @@ export class TripBookingLinkService {
     confirmationCode: string | null;
     total: number;
     currency: string;
+    contextPointId: string | null;
+    exposure: "indoor" | "outdoor" | "both" | "unknown";
     extra: Record<string, unknown>;
   }): Promise<void> {
     // `agenda_items` requires end > start; a same-day stay would otherwise fail.
@@ -183,6 +329,8 @@ export class TripBookingLinkService {
       confirmation_code: input.confirmationCode,
       total: input.total,
       currency: input.currency,
+      // The weather rules read the exposure from here; without it nothing is evaluated.
+      indoor_outdoor: input.exposure,
       ...input.extra,
     };
     const existing = await this.repository.findAgendaForProviderBooking(
@@ -191,6 +339,7 @@ export class TripBookingLinkService {
     );
     if (existing) {
       await this.repository.updateAgendaItem(existing.id, input.tripId, {
+        context_point_id: input.contextPointId,
         title: input.title,
         start_at: input.start,
         end_at: end,
@@ -203,6 +352,7 @@ export class TripBookingLinkService {
     }
     await this.repository.createAgendaItem({
       trip_id: input.tripId,
+      context_point_id: input.contextPointId,
       title: input.title,
       type: input.type,
       start_at: input.start,
@@ -234,4 +384,10 @@ export class TripBookingLinkService {
       status,
     });
   }
+}
+
+function hotelIdOf(providerBooking: ProviderBooking): string | null {
+  const metadata = providerBooking.metadata as { hotel_id?: unknown } | null;
+  const hotelId = metadata?.hotel_id;
+  return typeof hotelId === "string" && hotelId.length > 0 ? hotelId : null;
 }

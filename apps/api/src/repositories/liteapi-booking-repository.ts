@@ -4,6 +4,7 @@ import { AppError } from "../errors.js";
 import type {
   AgendaItem,
   Booking,
+  ContextPoint,
   Database,
   Payment,
   ProviderBooking,
@@ -247,6 +248,52 @@ export class LiteApiBookingRepository {
       .filter("metadata->>provider_booking_id", "eq", providerBookingId)
       .maybeSingle();
     if (error) throw persistenceFailure("agenda_items.get_for_booking");
+    return data;
+  }
+
+  /**
+   * The place a booked item happens at, found by the provider id it came from, so
+   * booking the same hotel twice reuses one location instead of piling up duplicates.
+   */
+  public async findContextPointForPlace(
+    tripId: string,
+    externalPlaceId: string,
+  ): Promise<ContextPoint | null> {
+    const { data, error } = await this.client
+      .from("context_points")
+      .select("*")
+      .eq("trip_id", tripId)
+      .eq("external_place_id", externalPlaceId)
+      .maybeSingle();
+    if (error) throw persistenceFailure("context_points.get_for_booking");
+    return data;
+  }
+
+  public async createContextPoint(
+    input: Database["public"]["Tables"]["context_points"]["Insert"],
+  ): Promise<ContextPoint> {
+    const { data, error } = await this.client
+      .from("context_points")
+      .insert(input)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("context_points.create_for_booking");
+    return data;
+  }
+
+  public async updateContextPoint(
+    id: string,
+    tripId: string,
+    patch: Database["public"]["Tables"]["context_points"]["Update"],
+  ): Promise<ContextPoint> {
+    const { data, error } = await this.client
+      .from("context_points")
+      .update(patch)
+      .eq("id", id)
+      .eq("trip_id", tripId)
+      .select("*")
+      .single();
+    if (error || !data) throw persistenceFailure("context_points.update_for_booking");
     return data;
   }
 
