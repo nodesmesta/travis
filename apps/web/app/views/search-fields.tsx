@@ -15,6 +15,7 @@ export function SearchField({
   hint,
   error,
   className,
+  plain,
   children,
 }: {
   label: string;
@@ -22,10 +23,13 @@ export function SearchField({
   hint?: string | undefined;
   error?: string | null | undefined;
   className?: string | undefined;
+  /** Renders a div: a field that holds buttons must not act as a label. */
+  plain?: boolean | undefined;
   children: ReactNode;
 }) {
+  const Tag = plain ? "div" : "label";
   return (
-    <label
+    <Tag
       className={`search-field ${className ?? ""} ${error ? "has-error" : ""}`}
     >
       <span className="search-field-label">
@@ -44,7 +48,7 @@ export function SearchField({
       ) : hint ? (
         <span className="search-field-hint">{hint}</span>
       ) : null}
-    </label>
+    </Tag>
   );
 }
 
