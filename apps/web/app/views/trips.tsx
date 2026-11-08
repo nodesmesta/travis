@@ -28,7 +28,7 @@ import type { TripsViewProps } from "./types";
  * A trip is advice, not a second list of bookings. It shows what the traveller
  * actually lives: the tickets in detail, the places they put them in, and the
  * travel between those places with its route, its traffic and its weather.
- * Bookings stays the transaction record; this page is what happens on the ground.
+ * What was paid stays here too, so this page is the single record of the trip.
  */
 
 const TYPE_LABEL: Record<string, string> = {
@@ -412,7 +412,6 @@ export default function TripsView({
   trip,
   trips: allTrips,
   onSelectTrip,
-  onOpenBookings,
 }: TripsViewProps) {
   const trips = allTrips ?? (trip ? [trip] : []);
   const [agenda, setAgenda] = useState<AgendaItemView[]>([]);
@@ -615,11 +614,6 @@ export default function TripsView({
                 {trip.end_at ? dayOf(trip.end_at, timezone) : "—"}
               </p>
             </div>
-            {onOpenBookings ? (
-              <button className="button ghost" onClick={onOpenBookings} type="button">
-                Bookings & invoices
-              </button>
-            ) : null}
           </div>
 
           {error ? (

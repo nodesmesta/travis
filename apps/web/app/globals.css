@@ -1987,60 +1987,6 @@ body {
   color: var(--teal-dark);
 }
 
-.booking-list {
-  display: grid;
-  gap: 12px;
-}
-
-.booking-record {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-}
-
-.booking-record-main {
-  min-width: 0;
-}
-
-.booking-record-kicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.booking-record h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 18px;
-}
-
-.booking-record p,
-.booking-record-side small {
-  margin: 6px 0 0;
-  color: var(--ink-muted);
-  font-size: 12px;
-}
-
-.booking-record-side {
-  display: grid;
-  flex: 0 0 auto;
-  justify-items: end;
-  gap: 5px;
-}
-
-.booking-record-side strong {
-  color: var(--teal-dark);
-  font-size: 18px;
-}
-
 .booking-status {
   display: inline-flex;
   align-items: center;
@@ -2153,10 +2099,6 @@ body {
   font-size: 12px;
 }
 
-.booking-record-side .provider-actions {
-  justify-items: end;
-}
-
 @media (max-width: 640px) {
   .explore-tabs {
     width: 100%;
@@ -2165,26 +2107,6 @@ body {
   .explore-tabs button {
     flex: 1;
     padding-inline: 8px;
-  }
-
-  .booking-record {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .booking-record-side {
-    width: 100%;
-    justify-items: stretch;
-  }
-
-  .booking-record-side .provider-actions {
-    justify-items: stretch;
-  }
-
-  .booking-record-side .provider-action-row,
-  .booking-record-side .button {
-    width: 100%;
   }
 
   .provider-status {
@@ -2217,12 +2139,16 @@ body {
   display: grid;
   gap: 8px;
   align-items: stretch;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
+  grid-template-columns:
+    minmax(0, 1.5fr) minmax(0, 1.6fr) minmax(0, 1fr)
+    minmax(0, 0.8fr) auto;
 }
 
 /* The flight bar has a swap control between the two airports. */
 .search-bar.flights {
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.85fr) auto;
+  grid-template-columns:
+    minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1.1fr)
+    minmax(0, 0.85fr) auto;
 }
 
 /* Checkout asks for four guest fields, all the same size. */
@@ -2241,7 +2167,9 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: white;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .search-field.grow {
@@ -2533,7 +2461,9 @@ body {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: white;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .result-row.flight {
@@ -3998,4 +3928,107 @@ body {
   padding-left: 16px;
   font-size: 12px;
   color: var(--muted, #55606f);
+}
+
+/* ---- Assistant as a right-hand rail ---- */
+.assistant-rail {
+  min-width: 0;
+  align-self: start;
+  position: sticky;
+  top: 92px;
+  max-height: calc(100vh - 112px);
+}
+
+.asst-panel.rail {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 112px);
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.asst-panel.rail .section-heading {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.asst-panel.rail .section-heading h2 {
+  font-size: 20px;
+}
+
+.asst-panel.rail .button-row {
+  display: flex;
+  gap: 4px;
+}
+
+.asst-panel.rail .asst-log {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: 46vh;
+}
+
+.asst-panel.rail .asst-context {
+  margin-top: 12px;
+}
+
+.asst-panel.rail .asst-quick {
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.asst-panel.rail .asst-cards {
+  grid-template-columns: 1fr;
+}
+
+.assistant-scrim {
+  display: none;
+}
+
+@media (max-width: 1120px) {
+  .assistant-rail {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 60;
+    width: min(430px, 94vw);
+    max-height: none;
+    padding: 12px;
+    background: var(--surface);
+    box-shadow: -18px 0 48px rgba(20, 30, 40, 0.22);
+  }
+
+  .asst-panel.rail {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .assistant-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(24, 32, 38, 0.45);
+  }
+}
+
+.asst-tips {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #d8e9e2;
+  border-radius: 12px;
+  background: #f1f8f5;
+}
+
+.asst-tips ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.asst-tips li strong {
+  color: var(--teal-dark);
 }

@@ -540,7 +540,6 @@ export default function HotelsView({
   trip,
   onEnsureTrip,
   onOpenInvoices,
-  onOpenBookings,
   onOpenTrips,
 }: ExploreViewProps) {
   const traveller = useTraveller();
@@ -1029,13 +1028,6 @@ export default function HotelsView({
                 onUpdated={setBooked}
               />
               <div className="provider-action-row">
-                <button
-                  className="button ghost"
-                  onClick={onOpenBookings}
-                  type="button"
-                >
-                  All reservations
-                </button>
                 <button
                   className="button ghost"
                   onClick={onOpenInvoices}
