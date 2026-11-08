@@ -132,7 +132,7 @@ function assertInput(input: EventDiscoveryInput): void {
 }
 
 /** Bump when the discovery pipeline changes so cached snapshots are not reused. */
-export const EVENT_PIPELINE_VERSION = "serp-pages-llm-v1";
+export const EVENT_PIPELINE_VERSION = "serp-pages-llm-v2";
 
 const MONTH_LABELS = [
   "January",
@@ -170,9 +170,12 @@ export function buildEventDiscoveryQuery(
   ].filter(Boolean);
   // Full JSON is the decided SERP format. It is requested explicitly so the
   // result never depends on the default format configured on the zone.
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+  // Bing is the SERP engine used in production: the Google SERP zone in this
+  // account answers with a captcha header, while the same zone serves Bing
+  // Full JSON. The response shape keeps the `organic` array the parser reads.
+  const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(
     searchTerms.join(" "),
-  )}&hl=${encodeURIComponent(input.filters.language ?? "en")}&brd_json=1`;
+  )}&setlang=${encodeURIComponent(input.filters.language ?? "en")}&brd_json=1`;
   const fingerprint = hash(
     JSON.stringify(
       stableValue({

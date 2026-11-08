@@ -119,15 +119,16 @@ export function buildActivityDiscoveryQuery(
     input.contextAddress,
     input.destination,
   ].filter((term): term is string => Boolean(term && term.trim()));
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+  const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(
     terms.join(" "),
-  )}&hl=${encodeURIComponent(input.language ?? "en")}&brd_json=1`;
+  )}&setlang=${encodeURIComponent(input.language ?? "en")}&brd_json=1`;
   return {
     input,
     searchUrl,
     fingerprint: placeFingerprint({
       provider: PROVIDER,
       category: "activity",
+      engine: "bing",
       contextPointId: input.contextPointId,
       language: input.language ?? "en",
     }),
