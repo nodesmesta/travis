@@ -279,3 +279,22 @@ export function searchCities(
   if (trimmed) params.set("q", trimmed);
   return request(`/places/cities?${params.toString()}`);
 }
+
+/** True only when `city` is one of the provider's cities in `country`. */
+export async function cityBelongsToCountry(
+  country: string,
+  city: string,
+): Promise<boolean> {
+  const params = new URLSearchParams({
+    country,
+    q: city.trim(),
+    limit: "1",
+  });
+  const result = await request<{
+    country: string;
+    cities: string[];
+    total: number;
+    exact?: boolean;
+  }>(`/places/cities?${params.toString()}`);
+  return result.exact === true;
+}

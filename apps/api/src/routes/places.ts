@@ -126,15 +126,19 @@ export const placeRoutes: RouteModule = async (context) => {
     ? Math.min(Math.max(rawLimit, 1), 100)
     : 50;
   const cached = await cities(context, code);
-  const filtered = filterCities(
-    cached.cities,
-    url.searchParams.get("q") ?? "",
-    max,
-  );
+  const query = url.searchParams.get("q") ?? "";
+  const filtered = filterCities(cached.cities, query, max);
+  const needle = query.trim().toLowerCase();
+  // The form uses this to reject a city that belongs to another country, which
+  // the rate search would otherwise answer with an empty result.
+  const exact =
+    needle.length > 0 &&
+    cached.cities.some((city) => city.toLowerCase() === needle);
   writeJson(context.response, 200, {
     country: code,
     cities: filtered.items,
     total: filtered.total,
+    exact,
     request_id: context.requestId,
   });
   return true;
