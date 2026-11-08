@@ -4,7 +4,7 @@ Travis is a business-travel companion that works from a confirmed trip. It keeps
 
 Built for the lablab.ai hackathon, Challenge 2 "Powering the Future of Work". Infrastructure target: Vultr. Live web data: Bright Data.
 
-> **Deployment status: not deployed.** The application has been run and validated only on a developer machine (local Supabase through the Supabase CLI and Docker). Nothing runs on Vultr yet and there is no public URL. Container files for the app layer (`deploy/`) exist and were verified locally only. See [docs/submission-checklist.md](docs/submission-checklist.md) and [docs/known-limitations.md](docs/known-limitations.md).
+> **Deployment status: live.** The application runs on a Vultr VM at **https://travis.nodesemesta.com** with Docker Compose, Caddy HTTPS and a self-hosted Supabase stack. The tested product scenario is still one business trip in Jakarta, and commerce remains sandbox/simulated where noted below. See [docs/known-limitations.md](docs/known-limitations.md) and the [whitepaper](docs/Travis-Whitepaper.pdf).
 
 ## The problem
 
@@ -110,7 +110,7 @@ Bright Data supplies the live web data for event discovery and for activity disc
 ### Access method
 
 - **Direct API.** `POST https://api.brightdata.com/request` with a body of zone, URL and `format: "raw"` (`packages/integrations/src/bright-data.ts`).
-- **SERP API zone for search.** The search URL is a Google search URL with `brd_json=1`, so the answer is Full JSON (organic results as structured fields) and does not depend on the zone's default format.
+- **SERP API zone for search.** The search URL is a Bing search URL with `brd_json=1`, so the answer is Full JSON (organic results as structured fields) and does not depend on the zone's default format. The Google SERP path is not used: the same zone answers a Google URL with `x-brd-error-code: captcha` and an empty body, while Bing returns the `organic` array the parser reads.
 - **Web Unlocker zone for source pages.** Candidate pages from the search are fetched through the Unlocker zone.
 - **Failures hidden behind HTTP 200.** Bright Data can answer HTTP 200 with an empty body and put the reason only in headers. The client reads `x-brd-error-code`, `x-brd-err-code` and `x-brd-error` on every response, maps rate-limit codes to `EXTERNAL_PROVIDER_RATE_LIMITED` and other codes to `EXTERNAL_PROVIDER_REJECTED`, and reports an empty body without a reason as `EXTERNAL_RESPONSE_INVALID`. Free-form provider text is shown only for a short list of known codes, with IP addresses masked.
 
@@ -120,7 +120,7 @@ Bright Data supplies the live web data for event discovery and for activity disc
 context point + date window + category
   -> query fingerprint -> cache lookup (valid entries only)
   -> Bright Data SERP (Full JSON)
-  -> candidate pages (skips Google redirect wrappers, other Google pages,
+  -> candidate pages (skips search-engine redirect wrappers, Google pages,
      social networks, binary files)
   -> each page through Web Unlocker
   -> parse5 text extraction and schema.org Event (JSON-LD) when present
@@ -238,7 +238,7 @@ packages/integrations  Provider adapters: Vultr Inference, Bright Data, HERE, Op
 contracts/        OpenAPI, JSON Schemas, enums, error codes, state transitions, fixtures
 supabase/         Migrations 0001 to 0010, seed, local config
 scripts/          Bootstrap, validators, browser scripts, provider smoke test
-docs/             Architecture, demo script, checklist, limitations, validation output
+docs/             Architecture, demo script, limitations, whitepaper, validation output
 plan/             Design (plan.md, segments, integrations) and task files with results
 ```
 
@@ -258,9 +258,10 @@ The full list is in [docs/known-limitations.md](docs/known-limitations.md).
 
 - [docs/architecture.md](docs/architecture.md): components, data flows, data model, trust boundaries, observability, security.
 - [docs/demo-script.md](docs/demo-script.md): 4 to 5 minute demo with preparation and backup steps.
-- [docs/submission-checklist.md](docs/submission-checklist.md): lablab.ai submission items and their real status.
 - [docs/known-limitations.md](docs/known-limitations.md): limitations and validation results.
-- `docs/validation/`: validation output and screenshots.
+- [docs/Travis-Whitepaper.pdf](docs/Travis-Whitepaper.pdf): 8-page whitepaper covering background, problem, solution, tech, orchestration, future work and conclusion.
+- [docs/Travis-Cover-16x9.png](docs/Travis-Cover-16x9.png): 16:9 project cover image.
+- `docs/validation/`: validation output.
 - `contracts/openapi.yaml`: HTTP contract.
 - `plan/`: design notes in Indonesian, per-task implementation records.
 
